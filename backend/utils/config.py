@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     
+    # Testing mode
+    testing_mode: bool = False
+    
     model_config = SettingsConfigDict(
         env_file="../.env",
         case_sensitive=False

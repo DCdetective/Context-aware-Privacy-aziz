@@ -8,6 +8,13 @@ import logging
 from utils.config import settings
 from database.identity_vault import identity_vault
 
+# Import semantic store based on mode
+if settings.testing_mode:
+    from vector_store.mock_semantic_store import MockSemanticStore
+    semantic_store = MockSemanticStore()
+else:
+    from vector_store.semantic_store import semantic_store
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -31,6 +38,9 @@ async def startup_event():
     logger.info("Initializing Local Identity Vault...")
     logger.info(f"Database path: {settings.sqlite_db_path}")
     logger.info("Identity Vault initialized successfully")
+    logger.info("Initializing Semantic Anchor Store...")
+    stats = semantic_store.get_store_stats()
+    logger.info(f"Semantic Store: {stats['total_vectors']} anchors stored")
     logger.info("=" * 60)
 
 # Mount static files
@@ -43,12 +53,16 @@ templates = Jinja2Templates(directory="../frontend/templates")
 @app.get("/health")
 async def health_check():
     """Health check endpoint for system status."""
+    store_stats = semantic_store.get_store_stats()
+    
     return {
         "status": "healthy",
         "service": "MedShield Backend",
         "version": "1.0.0",
         "components": {
-            "identity_vault": "operational"
+            "identity_vault": "operational",
+            "semantic_store": "operational",
+            "semantic_store_vectors": store_stats["total_vectors"]
         }
     }
 
