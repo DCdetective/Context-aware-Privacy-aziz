@@ -1,9 +1,93 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MedShield - Home</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <h1>MedShield</h1>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>🏥 MedShield</h1>
+                <p class="tagline">Privacy-Preserving Medical Assistant</p>
+            </div>
+        </header>
+        
+        <main class="home-main">
+            <section class="hero">
+                <h2>Welcome to MedShield</h2>
+                <p class="hero-description">
+                    A privacy-preserving multi-agent medical assistant that ensures your 
+                    personal information never leaves the trusted local environment.
+                </p>
+                <div class="privacy-badge">
+                    <span class="badge-icon">🔒</span>
+                    <span class="badge-text">100% Privacy Protected</span>
+                </div>
+            </section>
+            
+            <section class="actions">
+                <h3>What would you like to do?</h3>
+                <div class="action-cards">
+                    <div class="action-card" onclick="navigateTo('/appointment')">
+                        <div class="card-icon">📅</div>
+                        <h4>Book Appointment</h4>
+                        <p>Schedule a new medical appointment with privacy protection</p>
+                        <button class="btn btn-primary">Get Started</button>
+                    </div>
+                    
+                    <div class="action-card" onclick="navigateTo('/followup')">
+                        <div class="card-icon">🔄</div>
+                        <h4>Schedule Follow-Up</h4>
+                        <p>Book a follow-up based on your previous medical context</p>
+                        <button class="btn btn-primary">Continue Care</button>
+                    </div>
+                    
+                    <div class="action-card" onclick="navigateTo('/summary')">
+                        <div class="card-icon">📋</div>
+                        <h4>Generate Summary</h4>
+                        <p>Create a privacy-safe medical summary of your records</p>
+                        <button class="btn btn-primary">View Summary</button>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="features">
+                <h3>How MedShield Protects Your Privacy</h3>
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <span class="feature-icon">🛡️</span>
+                        <div class="feature-content">
+                            <h5>Local PII Protection</h5>
+                            <p>All personal information is stored locally and never sent to the cloud</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🔐</span>
+                        <div class="feature-content">
+                            <h5>Pseudonymization</h5>
+                            <p>Patient identities are replaced with UUIDs before cloud processing</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🤖</span>
+                        <div class="feature-content">
+                            <h5>Multi-Agent Architecture</h5>
+                            <p>Specialized AI agents ensure privacy at every step</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>🔒 Your privacy is protected. PII never leaves the local environment.</p>
+            <p class="copyright">&copy; 2024 MedShield - Academic Final Year Project</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/main.js"></script>
 </body>
 </html>

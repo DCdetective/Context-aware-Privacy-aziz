@@ -1,9 +1,106 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>MedShield - Follow-up</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedShield - Schedule Follow-Up</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <h1>Context-Aware Follow-Up Planning</h1>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>🏥 MedShield</h1>
+                <p class="tagline">Privacy-Preserving Medical Assistant</p>
+            </div>
+            <nav>
+                <a href="/" class="nav-link">Home</a>
+                <a href="/appointment" class="nav-link">Appointments</a>
+                <a href="/followup" class="nav-link active">Follow-Ups</a>
+                <a href="/summary" class="nav-link">Summaries</a>
+            </nav>
+        </header>
+        
+        <main class="form-main">
+            <section class="form-section">
+                <div class="form-header">
+                    <h2>🔄 Schedule Follow-Up Appointment</h2>
+                    <p>Schedule a follow-up based on your previous medical context</p>
+                </div>
+                
+                <form id="followupForm" class="medical-form">
+                    <div class="form-group">
+                        <label for="patientName">Full Name *</label>
+                        <input 
+                            type="text" 
+                            id="patientName" 
+                            name="patient_name" 
+                            placeholder="Enter your full name"
+                            required
+                        >
+                        <small class="form-hint">
+                            We'll use your stored medical context to schedule an appropriate follow-up
+                        </small>
+                    </div>
+                    
+                    <div class="info-box">
+                        <span class="info-icon">ℹ️</span>
+                        <div class="info-content">
+                            <strong>Context-Aware Scheduling</strong>
+                            <p>Your follow-up will be scheduled based on your previous visits and medical context, maintaining continuity of care while protecting your privacy.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="navigateTo('/')">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            Schedule Follow-Up
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="loadingState" class="loading-state" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Processing your follow-up request...</p>
+                    <p class="loading-detail">Retrieving medical context and coordinating schedule</p>
+                </div>
+                
+                <div id="resultSection" class="result-section" style="display: none;">
+                    <div class="result-success">
+                        <div class="result-icon">✅</div>
+                        <h3>Follow-Up Scheduled Successfully!</h3>
+                        <div id="resultDetails" class="result-details"></div>
+                        <button class="btn btn-primary" onclick="resetForm()">
+                            Schedule Another Follow-Up
+                        </button>
+                        <button class="btn btn-secondary" onclick="navigateTo('/')">
+                            Back to Home
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="errorSection" class="result-section error" style="display: none;">
+                    <div class="result-error">
+                        <div class="result-icon">❌</div>
+                        <h3>Error Scheduling Follow-Up</h3>
+                        <p id="errorMessage"></p>
+                        <button class="btn btn-primary" onclick="resetForm()">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>🔒 Your privacy is protected. PII never leaves the local environment.</p>
+            <p class="copyright">&copy; 2024 MedShield - Academic Final Year Project</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/main.js"></script>
+    <script src="/static/js/followup.js"></script>
 </body>
 </html>

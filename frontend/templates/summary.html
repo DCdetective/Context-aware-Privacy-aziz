@@ -1,9 +1,106 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>MedShield - Summary</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedShield - Medical Summary</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <h1>Privacy-Safe Medical Summary</h1>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>🏥 MedShield</h1>
+                <p class="tagline">Privacy-Preserving Medical Assistant</p>
+            </div>
+            <nav>
+                <a href="/" class="nav-link">Home</a>
+                <a href="/appointment" class="nav-link">Appointments</a>
+                <a href="/followup" class="nav-link">Follow-Ups</a>
+                <a href="/summary" class="nav-link active">Summaries</a>
+            </nav>
+        </header>
+        
+        <main class="form-main">
+            <section class="form-section">
+                <div class="form-header">
+                    <h2>📋 Generate Medical Summary</h2>
+                    <p>Create a privacy-safe summary of your medical records</p>
+                </div>
+                
+                <form id="summaryForm" class="medical-form">
+                    <div class="form-group">
+                        <label for="patientName">Full Name *</label>
+                        <input 
+                            type="text" 
+                            id="patientName" 
+                            name="patient_name" 
+                            placeholder="Enter your full name"
+                            required
+                        >
+                        <small class="form-hint">
+                            We'll generate a comprehensive summary of your medical records
+                        </small>
+                    </div>
+                    
+                    <div class="info-box">
+                        <span class="info-icon">ℹ️</span>
+                        <div class="info-content">
+                            <strong>Privacy-Safe Summaries</strong>
+                            <p>Summaries are generated using cloud reasoning on pseudonymized data. Your identity is restored only at the final output stage in the local environment.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="navigateTo('/')">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            Generate Summary
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="loadingState" class="loading-state" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Generating your medical summary...</p>
+                    <p class="loading-detail">Analyzing records and preparing summary</p>
+                </div>
+                
+                <div id="resultSection" class="result-section" style="display: none;">
+                    <div class="result-success">
+                        <div class="result-icon">✅</div>
+                        <h3>Medical Summary Generated!</h3>
+                        <div id="resultDetails" class="result-details"></div>
+                        <button class="btn btn-primary" onclick="resetForm()">
+                            Generate Another Summary
+                        </button>
+                        <button class="btn btn-secondary" onclick="navigateTo('/')">
+                            Back to Home
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="errorSection" class="result-section error" style="display: none;">
+                    <div class="result-error">
+                        <div class="result-icon">❌</div>
+                        <h3>Error Generating Summary</h3>
+                        <p id="errorMessage"></p>
+                        <button class="btn btn-primary" onclick="resetForm()">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>🔒 Your privacy is protected. PII never leaves the local environment.</p>
+            <p class="copyright">&copy; 2024 MedShield - Academic Final Year Project</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/main.js"></script>
+    <script src="/static/js/summary.js"></script>
 </body>
 </html>

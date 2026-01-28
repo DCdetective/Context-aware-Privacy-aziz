@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -103,15 +103,30 @@ async def health_check():
         }
     }
 
-# Root endpoint
+# Frontend page routes
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def home(request: Request):
     """Serve the home page."""
     logger.info("Serving home page")
-    return HTMLResponse(
-        content="<h1>MedShield API - All Systems Operational</h1>",
-        status_code=200
-    )
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/appointment", response_class=HTMLResponse)
+async def appointment_page(request: Request):
+    """Serve the appointment booking page."""
+    logger.info("Serving appointment page")
+    return templates.TemplateResponse("appointment.html", {"request": request})
+
+@app.get("/followup", response_class=HTMLResponse)
+async def followup_page(request: Request):
+    """Serve the follow-up scheduling page."""
+    logger.info("Serving follow-up page")
+    return templates.TemplateResponse("followup.html", {"request": request})
+
+@app.get("/summary", response_class=HTMLResponse)
+async def summary_page(request: Request):
+    """Serve the medical summary page."""
+    logger.info("Serving summary page")
+    return templates.TemplateResponse("summary.html", {"request": request})
 
 
 if __name__ == "__main__":
