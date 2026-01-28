@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1"
     
     # Database Configuration
-    sqlite_db_path: str = "./backend/database/identity_vault.db"
+    sqlite_db_path: str = "database/identity_vault.db"
     
     # Server Configuration
     backend_host: str = "0.0.0.0"

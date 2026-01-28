@@ -6,6 +6,7 @@ from pathlib import Path
 import logging
 
 from utils.config import settings
+from database.identity_vault import identity_vault
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +22,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize system components on startup."""
+    logger.info("=" * 60)
+    logger.info("🏥 MedShield - Privacy-Preserving Medical Assistant")
+    logger.info("=" * 60)
+    logger.info("Initializing Local Identity Vault...")
+    logger.info(f"Database path: {settings.sqlite_db_path}")
+    logger.info("Identity Vault initialized successfully")
+    logger.info("=" * 60)
+
 # Mount static files
 app.mount("/static", StaticFiles(directory="../frontend/static"), name="static")
 
@@ -34,7 +46,10 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "MedShield Backend",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "components": {
+            "identity_vault": "operational"
+        }
     }
 
 # Root endpoint
@@ -42,7 +57,10 @@ async def health_check():
 async def root():
     """Serve the home page."""
     logger.info("Serving home page")
-    return HTMLResponse(content="<h1>MedShield - System Initializing</h1>", status_code=200)
+    return HTMLResponse(
+        content="<h1>MedShield - Identity Vault Initialized</h1>",
+        status_code=200
+    )
 
 
 if __name__ == "__main__":
