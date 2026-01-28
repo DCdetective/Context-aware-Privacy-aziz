@@ -13,7 +13,7 @@ pinecone-client==3.0.0
 
 # LLM Integration
 ollama==0.1.6
-groq==0.4.1
+groq==1.0.0
 
 # Environment and Config
 python-dotenv==1.0.0
