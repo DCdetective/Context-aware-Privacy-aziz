@@ -134,7 +134,7 @@ Return JSON format only."""
         
         # Try to extract name patterns (expanded patterns)
         name_patterns = [
-            r"(?:Patient Name|Name):\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",  # Structured format
+            r"(?:Patient Name|Name):\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+?)(?:\n|,|$)",  # Structured format with proper end
             r"(?:name is |named |patient |I'm |I am )([A-Z][a-z]+ [A-Z][a-z]+)",
             r"Patient:\s*([A-Z][a-z]+ [A-Z][a-z]+)",  # Patient: Name format
             r"([A-Z][a-z]+ [A-Z][a-z]+)(?:,| is| -)"
