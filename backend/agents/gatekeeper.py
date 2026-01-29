@@ -5,7 +5,6 @@ from typing import Dict, Any, Tuple, List, Optional
 import logging
 
 from database.identity_vault import identity_vault
-from vector_store.mock_semantic_store import MockSemanticStore
 from utils.config import settings
 
 logger = logging.getLogger(__name__)
@@ -132,12 +131,30 @@ Return JSON format only."""
             "symptoms": text
         }
         
+        # Try to parse as JSON first (in case it's structured data)
+        try:
+            # Check if text looks like JSON
+            if text.strip().startswith('{'):
+                parsed = json.loads(text)
+                if "patient_name" in parsed:
+                    info["patient_name"] = parsed["patient_name"]
+                if "age" in parsed:
+                    info["age"] = parsed["age"]
+                if "gender" in parsed:
+                    info["gender"] = parsed["gender"]
+                if "symptoms" in parsed:
+                    info["symptoms"] = parsed["symptoms"]
+                return info
+        except:
+            pass
+        
         # Try to extract name patterns (expanded patterns)
         name_patterns = [
-            r"(?:Patient Name|Name):\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+?)(?:\n|,|$)",  # Structured format with proper end
-            r"(?:name is |named |patient |I'm |I am )([A-Z][a-z]+ [A-Z][a-z]+)",
-            r"Patient:\s*([A-Z][a-z]+ [A-Z][a-z]+)",  # Patient: Name format
-            r"([A-Z][a-z]+ [A-Z][a-z]+)(?:,| is| -)"
+            r"patient_name[\"']?\s*:\s*[\"']([^\"']+)[\"']",  # JSON-like format
+            r"(?:Patient Name|Name):\s*([A-Z][a-zA-Z0-9\s-]+?)(?=\s*,\s*Age:|\s*\n|\s*Age:|\s*Gender:)",  # Structured format - capture until comma+field or newline
+            r"(?:name is |named |patient |I'm |I am )([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
+            r"Patient:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",  # Patient: Name format
+            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:,| is| -)"
         ]
         
         for pattern in name_patterns:
@@ -148,6 +165,7 @@ Return JSON format only."""
         
         # Try to extract age (expanded patterns)
         age_patterns = [
+            r"age[\"']?\s*:\s*(\d{1,3})",  # JSON-like format
             r"Age:\s*(\d{1,3})",  # Structured format
             r"(\d{1,3})\s*(?:years old|yr|y\.o\.|age)",
             r",\s*(\d{1,3})\s*(?:years old|,|$)"
@@ -161,6 +179,7 @@ Return JSON format only."""
         
         # Try to extract gender (expanded patterns)
         gender_patterns = [
+            r"gender[\"']?\s*:\s*[\"']?(Female|Male|Other)[\"']?",  # JSON-like format
             r"Gender:\s*(Female|Male|Other)",  # Structured format - Female first to match before Male
             r"\b(female|woman|girl)\b",
             r"\b(male|man|boy)\b"
@@ -179,9 +198,16 @@ Return JSON format only."""
                 break
         
         # Try to extract symptoms
-        symptoms_match = re.search(r"Symptoms?:\s*(.+?)(?:\n|$)", text, re.IGNORECASE | re.DOTALL)
-        if symptoms_match:
-            info["symptoms"] = symptoms_match.group(1).strip()
+        symptoms_patterns = [
+            r"symptoms[\"']?\s*:\s*[\"']([^\"']+)[\"']",  # JSON-like format
+            r"Symptoms?:\s*(.+?)(?:\n|$)",  # Structured format
+        ]
+        
+        for pattern in symptoms_patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+            if match:
+                info["symptoms"] = match.group(1).strip()
+                break
         
         return info
     

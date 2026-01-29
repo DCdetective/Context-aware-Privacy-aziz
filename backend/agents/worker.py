@@ -7,7 +7,6 @@ import logging
 
 from utils.config import settings
 from database.identity_vault import identity_vault
-from vector_store.mock_semantic_store import MockSemanticStore
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class WorkerAgent:
     def __init__(self, semantic_store=None):
         """Initialize Worker Agent."""
         self.client = Groq(api_key=settings.groq_api_key)
-        self.model = "llama-3.1-70b-versatile"
+        self.model = "llama-3.3-70b-versatile"  # Updated Groq model (Jan 2026)
         self.semantic_store = semantic_store
         
         logger.info("Worker Agent initialized with Groq API")

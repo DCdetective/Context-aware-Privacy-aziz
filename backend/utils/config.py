@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+import os
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -32,8 +34,10 @@ class Settings(BaseSettings):
     testing_mode: bool = False
     
     model_config = SettingsConfigDict(
-        env_file="../.env",
-        case_sensitive=False
+        env_file=str(Path(__file__).parent.parent.parent / ".env"),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore"
     )
 
 

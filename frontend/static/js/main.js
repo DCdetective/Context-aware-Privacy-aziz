@@ -1,123 +1,136 @@
-// MedShield Frontend JavaScript - Navigation and Common Functions
+// Main utility functions
 
-// Navigation function
 function navigateTo(path) {
     window.location.href = path;
 }
 
-// Reset form function (to be overridden in page-specific JS)
-function resetForm() {
-    const form = document.querySelector('form');
-    if (form) {
-        form.reset();
+function showElement(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.display = 'block';
     }
-    
-    // Hide result sections
-    const loadingState = document.getElementById('loadingState');
-    const resultSection = document.getElementById('resultSection');
-    const errorSection = document.getElementById('errorSection');
-    
-    if (loadingState) loadingState.style.display = 'none';
-    if (resultSection) resultSection.style.display = 'none';
-    if (errorSection) errorSection.style.display = 'none';
-    
-    // Show form again
-    const formElement = document.querySelector('.medical-form');
-    if (formElement) formElement.style.display = 'block';
 }
 
-// Show loading state
+function hideElement(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.display = 'none';
+    }
+}
+
 function showLoading() {
-    const form = document.querySelector('.medical-form');
-    const loadingState = document.getElementById('loadingState');
-    
-    if (form) form.style.display = 'none';
-    if (loadingState) loadingState.style.display = 'block';
+    hideElement('resultSection');
+    hideElement('errorSection');
+    showElement('loadingState');
 }
 
-// Show success result
-function showSuccess(details) {
-    const loadingState = document.getElementById('loadingState');
-    const resultSection = document.getElementById('resultSection');
+function hideLoading() {
+    hideElement('loadingState');
+}
+
+function showSuccess(detailsHtml) {
+    hideLoading();
     const resultDetails = document.getElementById('resultDetails');
-    
-    if (loadingState) loadingState.style.display = 'none';
-    if (resultSection) resultSection.style.display = 'block';
-    
-    if (resultDetails && details) {
-        resultDetails.innerHTML = details;
+    if (resultDetails) {
+        resultDetails.innerHTML = detailsHtml;
     }
+    showElement('resultSection');
 }
 
-// Show error
-function showError(message) {
-    const loadingState = document.getElementById('loadingState');
-    const errorSection = document.getElementById('errorSection');
-    const errorMessage = document.getElementById('errorMessage');
-    
-    if (loadingState) loadingState.style.display = 'none';
-    if (errorSection) errorSection.style.display = 'block';
-    
-    if (errorMessage) {
-        errorMessage.textContent = message || 'An unexpected error occurred. Please try again.';
+function showError(errorMessage) {
+    hideLoading();
+    const errorElement = document.getElementById('errorMessage');
+    if (errorElement) {
+        errorElement.textContent = errorMessage;
     }
+    showElement('errorSection');
 }
 
-// Format result details as HTML
-function formatResultDetails(data) {
-    let html = '';
+function resetForm() {
+    // Hide result sections
+    hideElement('resultSection');
+    hideElement('errorSection');
+    hideElement('loadingState');
     
-    if (data.patient_name) {
-        html += `<p><strong>Patient:</strong> ${data.patient_name}</p>`;
-    }
+    // Reset form
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => form.reset());
     
-    if (data.appointment_details) {
-        html += `<p><strong>Details:</strong> ${data.appointment_details}</p>`;
-    }
-    
-    if (data.follow_up) {
-        html += `<p><strong>Follow-Up:</strong> ${data.follow_up}</p>`;
-    }
-    
-    if (data.summary) {
-        html += `<p><strong>Summary:</strong></p>`;
-        html += `<p>${data.summary}</p>`;
-    }
-    
-    if (data.message) {
-        html += `<p>${data.message}</p>`;
-    }
-    
-    return html;
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// API call helper
-async function apiCall(endpoint, method, data) {
-    try {
-        const options = {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        };
-        
-        if (data) {
-            options.body = JSON.stringify(data);
+function formatDateTime(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+async function makeApiCall(endpoint, method, data = null) {
+    const options = {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
         }
-        
+    };
+    
+    if (data) {
+        options.body = JSON.stringify(data);
+    }
+    
+    try {
         const response = await fetch(endpoint, options);
+        const responseData = await response.json();
         
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            throw new Error(responseData.detail || 'API request failed');
         }
         
-        return await response.json();
+        return responseData;
     } catch (error) {
-        console.error('API call error:', error);
+        console.error('API Error:', error);
         throw error;
     }
 }
 
-// Console log for debugging
-console.log('MedShield frontend loaded successfully');
+// Form validation helper
+function validateForm(formElement) {
+    const inputs = formElement.querySelectorAll('[required]');
+    let isValid = true;
+    
+    inputs.forEach(input => {
+        if (!input.value.trim()) {
+            isValid = false;
+            input.classList.add('error');
+        } else {
+            input.classList.remove('error');
+        }
+    });
+    
+    return isValid;
+}
+
+// Add input validation styling
+document.addEventListener('DOMContentLoaded', function() {
+    const inputs = document.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        input.addEventListener('blur', function() {
+            if (this.hasAttribute('required') && !this.value.trim()) {
+                this.classList.add('error');
+            } else {
+                this.classList.remove('error');
+            }
+        });
+        
+        input.addEventListener('input', function() {
+            this.classList.remove('error');
+        });
+    });
+});

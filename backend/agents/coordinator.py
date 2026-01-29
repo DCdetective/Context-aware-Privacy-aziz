@@ -23,7 +23,7 @@ class CoordinatorAgent:
     def __init__(self):
         """Initialize Coordinator Agent."""
         self.client = Groq(api_key=settings.groq_api_key)
-        self.model = "llama-3.1-70b-versatile"  # Groq free tier model
+        self.model = "llama-3.3-70b-versatile"  # Updated Groq model (Jan 2026)
         
         logger.info("Coordinator Agent initialized with Groq API")
     

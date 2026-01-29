@@ -49,22 +49,47 @@ async def schedule_followup(request: FollowUpRequest):
         
         logger.info(f"Step 1: Received follow-up request for {request.patient_name}")
         
-        # Step 2: Lookup patient UUID (requires basic identity info)
-        # We need at least name to identify the patient
-        # In a real system, you might require age/gender for disambiguation
-        logger.info("Step 2: Looking up patient UUID...")
+        # Step 2: Lookup patient UUID by name
+        # For follow-ups, we look up existing patient by name only
+        logger.info("Step 2: Looking up patient UUID by name...")
         
-        # Create a minimal pseudonymization call to get UUID
-        # This is a simplified approach - in production, you'd need better patient lookup
-        user_input = f"Patient Name: {request.patient_name}, Age: 0, Gender: Unknown, Symptoms: Follow-up request"
-        pseudo_data = gatekeeper_agent.pseudonymize_input(user_input)
+        # Look up patient in identity vault by name
+        from database.identity_vault import identity_vault
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
         
-        patient_uuid = pseudo_data["patient_uuid"]
-        logger.info(f"         Found UUID: {patient_uuid[:8]}...")
+        session = identity_vault._get_session()
+        try:
+            from database.models import PatientIdentity
+            # Find patient by name (case-insensitive)
+            patient = session.query(PatientIdentity).filter(
+                PatientIdentity.patient_name == request.patient_name
+            ).first()
+            
+            if not patient:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Patient '{request.patient_name}' not found. Please schedule an initial appointment first."
+                )
+            
+            patient_uuid = patient.patient_uuid
+            logger.info(f"         Found UUID: {patient_uuid[:8]}...")
+        finally:
+            session.close()
         
-        # Step 3: Retrieve previous semantic context
+        # Step 3: Retrieve previous semantic context from semantic store
         logger.info("Step 3: Retrieving previous medical context...")
-        semantic_context = pseudo_data.get("semantic_context", {})
+        semantic_context = {}
+        # Try to get semantic anchors from the store if available
+        try:
+            from main import semantic_store
+            if semantic_store:
+                anchors = semantic_store.retrieve_semantic_anchors(patient_uuid, limit=1)
+                if anchors:
+                    semantic_context = anchors[0].get("semantic_data", {})
+        except:
+            logger.warning("Could not retrieve semantic context, using empty context")
+            semantic_context = {}
         
         # Step 4: Coordinator planning
         logger.info("Step 4: Invoking Coordinator for follow-up planning...")
