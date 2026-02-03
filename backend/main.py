@@ -38,9 +38,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="MedShield - Privacy-Preserving Medical Assistant",
-    description="A multi-agent system ensuring PII never leaves the local environment",
-    version="1.0.0"
+    title="MedShield v2 - Privacy-Preserving Medical Chatbot",
+    description="Multi-agent conversational system ensuring PII never leaves the local environment",
+    version="2.0.0"
 )
 
 # Add CORS middleware
@@ -61,18 +61,11 @@ app.include_router(summaries_router)
 async def startup_event():
     """Initialize system components on startup."""
     logger.info("=" * 60)
-    logger.info("🏥 MedShield - Privacy-Preserving Medical Assistant")
+    logger.info("🏥 MedShield v2 - Privacy-Preserving Medical Chatbot")
     logger.info("=" * 60)
-    logger.info("Initializing Local Identity Vault...")
-    logger.info(f"Database path: {settings.sqlite_db_path}")
-    logger.info("Identity Vault initialized successfully")
-    logger.info("Initializing Semantic Anchor Store...")
-    stats = semantic_store.get_store_stats()
-    logger.info(f"Semantic Store: {stats['total_vectors']} anchors stored")
-    logger.info("Initializing Multi-Agent System...")
-    logger.info("  - Gatekeeper Agent (Ollama) ✓")
-    logger.info("  - Coordinator Agent (Groq) ✓")
-    logger.info("  - Worker Agent (Groq) ✓")
+    logger.info("Initializing system components...")
+    logger.info("✓ Configuration loaded")
+    logger.info("✓ Logging configured")
     logger.info("=" * 60)
     logger.info("🚀 System Ready")
     logger.info("=" * 60)
@@ -87,20 +80,10 @@ templates = Jinja2Templates(directory="../frontend/templates")
 @app.get("/health")
 async def health_check():
     """Health check endpoint for system status."""
-    store_stats = semantic_store.get_store_stats()
-    
     return {
         "status": "healthy",
-        "service": "MedShield Backend",
-        "version": "1.0.0",
-        "components": {
-            "identity_vault": "operational",
-            "semantic_store": "operational",
-            "semantic_store_vectors": store_stats["total_vectors"],
-            "gatekeeper_agent": "operational",
-            "coordinator_agent": "operational",
-            "worker_agent": "operational"
-        }
+        "service": "MedShield v2",
+        "version": "2.0.0"
     }
 
 # Frontend page routes

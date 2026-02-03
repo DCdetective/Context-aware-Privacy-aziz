@@ -1,4 +1,9 @@
 import pytest
+import os
+
+# Set testing mode before importing main
+os.environ["TESTING_MODE"] = "true"
+
 from fastapi.testclient import TestClient
 from main import app
 

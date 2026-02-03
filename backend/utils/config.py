@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
-import os
 from pathlib import Path
 
 
@@ -13,11 +12,15 @@ class Settings(BaseSettings):
     # Pinecone Configuration
     pinecone_api_key: str
     pinecone_environment: str
-    pinecone_index_name: str = "medshield-semantic-store"
+    pinecone_index_metadata: str = "medshield-metadata"
+    pinecone_index_synthetic: str = "medshield-synthetic"
     
     # Ollama Configuration
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
+    
+    # OpenAI Configuration (for embeddings)
+    openai_api_key: Optional[str] = None
     
     # Database Configuration
     sqlite_db_path: str = "database/identity_vault.db"
@@ -32,6 +35,9 @@ class Settings(BaseSettings):
     
     # Testing mode
     testing_mode: bool = False
+    
+    # Security
+    secret_key: str = "change-this-in-production"
     
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).parent.parent.parent / ".env"),

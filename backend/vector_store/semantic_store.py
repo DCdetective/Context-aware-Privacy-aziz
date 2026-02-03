@@ -28,7 +28,7 @@ class SemanticAnchorStore:
         """Initialize Pinecone semantic store."""
         try:
             self.pc = Pinecone(api_key=settings.pinecone_api_key)
-            self.index_name = settings.pinecone_index_name
+            self.index_name = settings.pinecone_index_metadata
             
             # Connect to index first to get actual dimension
             self.index = self.pc.Index(self.index_name)
