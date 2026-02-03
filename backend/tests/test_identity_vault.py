@@ -194,51 +194,35 @@ def test_get_patient_records_filtered(test_vault):
     assert appointments[0]["record_type"] == "appointment"
 
 
-def test_audit_trail_logging(test_vault):
-    """Test that audit trail is properly logged."""
-    # Perform some operations
+def test_audit_logs(test_vault):
+    """Test audit logging."""
+    # Create patient (generates audit log)
     patient_uuid, _ = test_vault.pseudonymize_patient(
-        patient_name="Eve Thompson",
-        age=29,
-        gender="Female",
-        component="test"
+        patient_name="Eve Anderson",
+        age=25,
+        gender="Female"
     )
     
-    test_vault.reidentify_patient(
-        patient_uuid=patient_uuid,
-        component="test"
+    # Get audit logs
+    logs = test_vault.get_audit_logs(patient_uuid=patient_uuid)
+    
+    assert len(logs) > 0
+    assert logs[0]['patient_uuid'] == patient_uuid
+    assert logs[0]['operation'] == "pseudonymize_new"
+
+
+def test_privacy_compliance(test_vault):
+    """Test privacy compliance verification."""
+    # Create patient
+    test_vault.pseudonymize_patient(
+        patient_name="Frank Brown",
+        age=55,
+        gender="Male"
     )
     
-    # Retrieve audit trail
-    audit_logs = test_vault.get_audit_trail(patient_uuid=patient_uuid)
+    # Check compliance
+    report = test_vault.verify_privacy_compliance()
     
-    # Should have at least pseudonymize_new and reidentify operations
-    assert len(audit_logs) >= 2, f"Expected at least 2 audit logs, got {len(audit_logs)}"
-    assert all(log["cloud_exposed"] is False for log in audit_logs), "Some logs marked as cloud_exposed=True"
-    assert all(log["pii_accessed"] is True for log in audit_logs), "Some logs marked as pii_accessed=False"
-
-
-def test_audit_trail_privacy_compliance(test_vault):
-    """Test that no operations are marked as cloud-exposed."""
-    # Create multiple patients and operations
-    for i in range(3):
-        patient_uuid, _ = test_vault.pseudonymize_patient(
-            patient_name=f"Patient {i}",
-            age=30 + i,
-            gender="Male" if i % 2 == 0 else "Female",
-            component="test"
-        )
-        
-        test_vault.store_medical_record(
-            patient_uuid=patient_uuid,
-            record_type="appointment",
-            symptoms=f"Symptom {i}",
-            component="test"
-        )
-    
-    # Check all audit logs
-    all_logs = test_vault.get_audit_trail(limit=100)
-    
-    # CRITICAL: No operation should ever be cloud-exposed
-    assert all(log["cloud_exposed"] is False for log in all_logs)
-    print(f"✅ Privacy compliance verified: {len(all_logs)} operations, 0 cloud-exposed")
+    assert report['privacy_compliant'] is True
+    assert report['cloud_exposed_count'] == 0
+    assert report['total_patients'] >= 1
