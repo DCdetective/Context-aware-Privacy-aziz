@@ -21,6 +21,10 @@ if settings.testing_mode:
 else:
     from vector_store.semantic_store import semantic_store
 
+# Import vector stores
+from vector_store import metadata_store, synthetic_store
+from vector_store.mock_stores import MockMetadataStore, MockSyntheticStore
+
 # Import agents and inject dependencies
 from agents.gatekeeper import gatekeeper_agent
 from agents.worker import worker_agent
@@ -66,6 +70,28 @@ async def startup_event():
     logger.info("Initializing system components...")
     logger.info("✓ Configuration loaded")
     logger.info("✓ Logging configured")
+    
+    # Initialize vector stores
+    import vector_store.metadata_store as ms_module
+    import vector_store.synthetic_store as ss_module
+    
+    if settings.testing_mode:
+        ms_module.metadata_store = MockMetadataStore()
+        ss_module.synthetic_store = MockSyntheticStore()
+        logger.info("✓ Using mock vector stores (testing mode)")
+    else:
+        try:
+            from vector_store.metadata_store import MetadataStore
+            from vector_store.synthetic_store import SyntheticStore
+            ms_module.metadata_store = MetadataStore()
+            ss_module.synthetic_store = SyntheticStore()
+            logger.info("✓ Pinecone vector stores initialized")
+        except Exception as e:
+            logger.warning(f"⚠ Failed to initialize Pinecone stores, using mocks: {e}")
+            ms_module.metadata_store = MockMetadataStore()
+            ss_module.synthetic_store = MockSyntheticStore()
+            logger.info("✓ Using mock vector stores (fallback)")
+    
     logger.info("=" * 60)
     logger.info("🚀 System Ready")
     logger.info("=" * 60)
