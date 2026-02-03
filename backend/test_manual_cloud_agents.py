@@ -1,4 +1,4 @@
-from agents.coordinator import coordinator_agent
+from agents.coordinator import coordinator
 from agents.worker import worker_agent
 from agents.gatekeeper import gatekeeper_agent
 from vector_store.mock_semantic_store import MockSemanticStore
@@ -24,7 +24,7 @@ print(f"Semantic: {semantic_context}")
 
 # Step 1: Coordinator plans the task
 print(f"\n[COORDINATOR]")
-coord_result = coordinator_agent.coordinate_request(
+coord_result = coordinator.coordinate_request(
     patient_uuid=patient_uuid,
     action_type="appointment",
     semantic_context=semantic_context

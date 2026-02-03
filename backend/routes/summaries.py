@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 import logging
 
 from agents.gatekeeper import gatekeeper_agent
-from agents.coordinator import coordinator_agent
+from agents.coordinator import coordinator
 from agents.worker import worker_agent
 
 logger = logging.getLogger(__name__)
@@ -58,11 +58,9 @@ async def generate_summary(request: SummaryRequest):
         logger.info("Step 3: Invoking Coordinator for summary planning...")
         semantic_context = pseudo_data.get("semantic_context", {})
         
-        coord_result = coordinator_agent.coordinate_request(
-            patient_uuid=patient_uuid,
-            action_type="summary",
-            semantic_context=semantic_context
-        )
+        # Use new coordinator with process_message
+        message = f"Patient Name: {request.patient_name}, Request: Generate medical summary"
+        coord_result = coordinator.process_message(message)
         
         if not coord_result.get("ready_for_worker"):
             raise HTTPException(status_code=400, detail="Coordination failed")

@@ -4,7 +4,7 @@ from typing import Optional
 import logging
 
 from agents.gatekeeper import gatekeeper_agent
-from agents.coordinator import coordinator_agent
+from agents.coordinator import coordinator
 from agents.worker import worker_agent
 from database.identity_vault import identity_vault
 
@@ -93,11 +93,9 @@ async def schedule_followup(request: FollowUpRequest):
         
         # Step 4: Coordinator planning
         logger.info("Step 4: Invoking Coordinator for follow-up planning...")
-        coord_result = coordinator_agent.coordinate_request(
-            patient_uuid=patient_uuid,
-            action_type="followup",
-            semantic_context=semantic_context
-        )
+        # Use new coordinator with process_message
+        message = f"Patient Name: {request.patient_name}, Request: Follow-up appointment"
+        coord_result = coordinator.process_message(message)
         
         if not coord_result.get("ready_for_worker"):
             raise HTTPException(status_code=400, detail="Coordination failed")
