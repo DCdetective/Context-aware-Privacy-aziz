@@ -13,6 +13,7 @@ from database.identity_vault import identity_vault
 from routes.appointments import router as appointments_router
 from routes.followups import router as followups_router
 from routes.summaries import router as summaries_router
+from routes.chat import router as chat_router
 
 # Import semantic store based on mode
 if settings.testing_mode:
@@ -60,6 +61,7 @@ app.add_middleware(
 app.include_router(appointments_router)
 app.include_router(followups_router)
 app.include_router(summaries_router)
+app.include_router(chat_router)
 
 @app.on_event("startup")
 async def startup_event():
@@ -115,8 +117,8 @@ async def health_check():
 # Frontend page routes
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Serve the home page."""
-    logger.info("Serving home page")
+    """Serve the chatbot interface."""
+    logger.info("Serving chatbot interface")
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/appointment", response_class=HTMLResponse)

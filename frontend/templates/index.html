@@ -3,91 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedShield - Home</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <title>MedShield - Medical Assistant Chatbot</title>
+    <link rel="stylesheet" href="/static/css/chatbot.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="logo">
-                <h1>🏥 MedShield</h1>
-                <p class="tagline">Privacy-Preserving Medical Assistant</p>
-            </div>
-        </header>
-        
-        <main class="home-main">
-            <section class="hero">
-                <h2>Welcome to MedShield</h2>
-                <p class="hero-description">
-                    A privacy-preserving multi-agent medical assistant that ensures your 
-                    personal information never leaves the trusted local environment.
-                </p>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <h1>🏥 MedShield</h1>
+                    <p class="tagline">Privacy-Preserving Medical Assistant</p>
+                </div>
                 <div class="privacy-badge">
                     <span class="badge-icon">🔒</span>
                     <span class="badge-text">100% Privacy Protected</span>
                 </div>
-            </section>
-            
-            <section class="actions">
-                <h3>What would you like to do?</h3>
-                <div class="action-cards">
-                    <div class="action-card" onclick="navigateTo('/appointment')">
-                        <div class="card-icon">📅</div>
-                        <h4>Book Appointment</h4>
-                        <p>Schedule a new medical appointment with privacy protection</p>
-                        <button class="btn btn-primary">Get Started</button>
-                    </div>
-                    
-                    <div class="action-card" onclick="navigateTo('/followup')">
-                        <div class="card-icon">🔄</div>
-                        <h4>Schedule Follow-Up</h4>
-                        <p>Book a follow-up based on your previous medical context</p>
-                        <button class="btn btn-primary">Continue Care</button>
-                    </div>
-                    
-                    <div class="action-card" onclick="navigateTo('/summary')">
-                        <div class="card-icon">📋</div>
-                        <h4>Generate Summary</h4>
-                        <p>Create a privacy-safe medical summary of your records</p>
-                        <button class="btn btn-primary">View Summary</button>
-                    </div>
-                </div>
-            </section>
-            
-            <section class="features">
-                <h3>How MedShield Protects Your Privacy</h3>
-                <div class="feature-list">
-                    <div class="feature-item">
-                        <span class="feature-icon">🛡️</span>
-                        <div class="feature-content">
-                            <h5>Local PII Protection</h5>
-                            <p>All personal information is stored locally and never sent to the cloud</p>
-                        </div>
-                    </div>
-                    <div class="feature-item">
-                        <span class="feature-icon">🔐</span>
-                        <div class="feature-content">
-                            <h5>Pseudonymization</h5>
-                            <p>Patient identities are replaced with UUIDs before cloud processing</p>
-                        </div>
-                    </div>
-                    <div class="feature-item">
-                        <span class="feature-icon">🤖</span>
-                        <div class="feature-content">
-                            <h5>Multi-Agent Architecture</h5>
-                            <p>Specialized AI agents ensure privacy at every step</p>
+            </div>
+        </header>
+
+        <!-- Main Chat Container -->
+        <div class="chat-container">
+            <!-- Chat Messages Area -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Welcome Message -->
+                <div class="message bot-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <p>Hello! I'm MedShield, your privacy-preserving medical assistant.</p>
+                            <p>I can help you with:</p>
+                            <ul>
+                                <li>📅 Booking appointments</li>
+                                <li>🔄 Scheduling follow-ups</li>
+                                <li>📋 Generating medical summaries</li>
+                                <li>❓ General medical queries</li>
+                            </ul>
+                            <p>How can I assist you today?</p>
                         </div>
                     </div>
                 </div>
-            </section>
-        </main>
-        
-        <footer>
-            <p>🔒 Your privacy is protected. PII never leaves the local environment.</p>
-            <p class="copyright">&copy; 2024 MedShield - Academic Final Year Project</p>
+            </div>
+
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <div class="message-avatar">🤖</div>
+                <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="chat-input-container">
+                <form id="chatForm" class="chat-form">
+                    <textarea
+                        id="messageInput"
+                        placeholder="Type your message here... (e.g., 'I'm John Doe, 45 years old, I need an appointment for chest pain')"
+                        rows="2"
+                        maxlength="1000"
+                    ></textarea>
+                    <button type="submit" class="send-button" id="sendButton">
+                        <span class="send-icon">➤</span>
+                        Send
+                    </button>
+                </form>
+                <div class="input-hints">
+                    💡 <strong>Tip:</strong> Include your name, age, and medical concern for better assistance
+                </div>
+            </div>
+        </div>
+
+        <!-- Privacy Visualization Sidebar (Collapsible) -->
+        <div class="privacy-sidebar" id="privacySidebar">
+            <div class="sidebar-header">
+                <h3>🔐 Privacy Monitor</h3>
+                <button class="toggle-button" id="toggleSidebar">−</button>
+            </div>
+            <div class="sidebar-content" id="sidebarContent">
+                <p class="sidebar-description">
+                    Track how your data is protected at every step
+                </p>
+                <div id="privacySteps" class="privacy-steps">
+                    <!-- Privacy steps will be added dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Toggle Privacy Sidebar Button (when collapsed) -->
+        <button class="show-privacy-button" id="showPrivacyButton" style="display: none;">
+            🔐 Show Privacy Monitor
+        </button>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>🔒 Your privacy is guaranteed. All PII stays local and never reaches the cloud.</p>
+            <p class="copyright">&copy; 2026 MedShield - Academic Final Year Project</p>
         </footer>
     </div>
-    
-    <script src="/static/js/main.js"></script>
+
+    <script src="/static/js/chat.js"></script>
+    <script src="/static/js/visualization.js"></script>
 </body>
 </html>
