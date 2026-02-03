@@ -1,0 +1,44 @@
+{
+  "example_cases": [
+    {
+      "case_id": "CASE001",
+      "scenario": "Patient with persistent cough and fever for 3 days",
+      "recommended_specialty": "respiratory",
+      "urgency": "urgent",
+      "estimated_duration": 45,
+      "notes": "Consider respiratory infection, may need chest X-ray"
+    },
+    {
+      "case_id": "CASE002",
+      "scenario": "Patient with mild headache, occasional, seeking routine checkup",
+      "recommended_specialty": "general_medicine",
+      "urgency": "routine",
+      "estimated_duration": 30,
+      "notes": "General consultation sufficient"
+    },
+    {
+      "case_id": "CASE003",
+      "scenario": "Patient with severe chest pain radiating to left arm",
+      "recommended_specialty": "cardiology",
+      "urgency": "emergency",
+      "estimated_duration": 60,
+      "notes": "Potential cardiac emergency, immediate attention required"
+    },
+    {
+      "case_id": "CASE004",
+      "scenario": "Patient needs follow-up after surgery from 2 weeks ago",
+      "recommended_specialty": "general_medicine",
+      "urgency": "routine",
+      "estimated_duration": 20,
+      "notes": "Standard post-surgery follow-up"
+    },
+    {
+      "case_id": "CASE005",
+      "scenario": "Child with rash and itching",
+      "recommended_specialty": "pediatrics",
+      "urgency": "routine",
+      "estimated_duration": 30,
+      "notes": "Pediatric consultation for skin condition"
+    }
+  ]
+}

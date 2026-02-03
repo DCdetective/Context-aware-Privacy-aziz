@@ -1,0 +1,62 @@
+{
+  "appointment_rules": {
+    "emergency": {
+      "max_wait_hours": 2,
+      "priority": "highest",
+      "requires_immediate_attention": true
+    },
+    "urgent": {
+      "max_wait_days": 1,
+      "priority": "high",
+      "can_schedule_same_day": true
+    },
+    "routine": {
+      "max_wait_days": 7,
+      "priority": "normal",
+      "advance_booking_days": 30
+    }
+  },
+  "consultation_duration": {
+    "general_checkup": 30,
+    "specialist_consultation": 45,
+    "follow_up": 20,
+    "emergency": 60
+  },
+  "working_hours": {
+    "weekday": {
+      "start": "08:00",
+      "end": "18:00"
+    },
+    "saturday": {
+      "start": "09:00",
+      "end": "14:00"
+    },
+    "sunday": "closed"
+  },
+  "follow_up_rules": {
+    "post_surgery": {
+      "days_after": 7,
+      "required": true
+    },
+    "chronic_condition": {
+      "days_after": 30,
+      "required": true
+    },
+    "general_visit": {
+      "days_after": 14,
+      "required": false
+    }
+  },
+  "patient_requirements": {
+    "new_patient": {
+      "registration_required": true,
+      "documents_needed": ["ID", "insurance_card"],
+      "extra_time_minutes": 15
+    },
+    "existing_patient": {
+      "registration_required": false,
+      "documents_needed": [],
+      "extra_time_minutes": 0
+    }
+  }
+}

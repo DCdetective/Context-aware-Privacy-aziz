@@ -1,0 +1,122 @@
+{
+  "doctors": [
+    {
+      "doctor_id": "DOC001",
+      "name": "Dr. Sarah Chen",
+      "specialty": "cardiology",
+      "gender": "female",
+      "experience_years": 15,
+      "available_days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+      "consultation_duration": 45,
+      "emergency_available": true
+    },
+    {
+      "doctor_id": "DOC002",
+      "name": "Dr. Michael Roberts",
+      "specialty": "general_medicine",
+      "gender": "male",
+      "experience_years": 20,
+      "available_days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "consultation_duration": 30,
+      "emergency_available": true
+    },
+    {
+      "doctor_id": "DOC003",
+      "name": "Dr. Emily Thompson",
+      "specialty": "neurology",
+      "gender": "female",
+      "experience_years": 12,
+      "available_days": ["Tuesday", "Wednesday", "Thursday", "Friday"],
+      "consultation_duration": 60,
+      "emergency_available": false
+    },
+    {
+      "doctor_id": "DOC004",
+      "name": "Dr. James Wilson",
+      "specialty": "respiratory",
+      "gender": "male",
+      "experience_years": 18,
+      "available_days": ["Monday", "Wednesday", "Friday"],
+      "consultation_duration": 45,
+      "emergency_available": true
+    },
+    {
+      "doctor_id": "DOC005",
+      "name": "Dr. Maria Garcia",
+      "specialty": "pediatrics",
+      "gender": "female",
+      "experience_years": 10,
+      "available_days": ["Monday", "Tuesday", "Thursday", "Friday"],
+      "consultation_duration": 30,
+      "emergency_available": false
+    },
+    {
+      "doctor_id": "DOC006",
+      "name": "Dr. David Park",
+      "specialty": "orthopedics",
+      "gender": "male",
+      "experience_years": 14,
+      "available_days": ["Tuesday", "Thursday", "Friday"],
+      "consultation_duration": 45,
+      "emergency_available": false
+    },
+    {
+      "doctor_id": "DOC007",
+      "name": "Dr. Lisa Anderson",
+      "specialty": "dermatology",
+      "gender": "female",
+      "experience_years": 8,
+      "available_days": ["Monday", "Tuesday", "Wednesday"],
+      "consultation_duration": 30,
+      "emergency_available": false
+    },
+    {
+      "doctor_id": "DOC008",
+      "name": "Dr. Robert Kumar",
+      "specialty": "gastroenterology",
+      "gender": "male",
+      "experience_years": 16,
+      "available_days": ["Wednesday", "Thursday", "Friday"],
+      "consultation_duration": 45,
+      "emergency_available": false
+    },
+    {
+      "doctor_id": "DOC009",
+      "name": "Dr. Jennifer Lee",
+      "specialty": "endocrinology",
+      "gender": "female",
+      "experience_years": 11,
+      "available_days": ["Monday", "Tuesday", "Thursday"],
+      "consultation_duration": 45,
+      "emergency_available": false
+    },
+    {
+      "doctor_id": "DOC010",
+      "name": "Dr. Thomas Brown",
+      "specialty": "general_medicine",
+      "gender": "male",
+      "experience_years": 25,
+      "available_days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "consultation_duration": 30,
+      "emergency_available": true
+    }
+  ],
+  "specialty_mapping": {
+    "cardiac": "cardiology",
+    "heart": "cardiology",
+    "respiratory": "respiratory",
+    "breathing": "respiratory",
+    "lung": "respiratory",
+    "neurological": "neurology",
+    "headache": "neurology",
+    "brain": "neurology",
+    "digestive": "gastroenterology",
+    "stomach": "gastroenterology",
+    "skin": "dermatology",
+    "bone": "orthopedics",
+    "joint": "orthopedics",
+    "children": "pediatrics",
+    "child": "pediatrics",
+    "general": "general_medicine"
+  }
+}

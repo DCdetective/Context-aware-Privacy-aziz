@@ -1,0 +1,93 @@
+{
+  "symptom_categories": {
+    "respiratory": {
+      "common_symptoms": ["cough", "shortness of breath", "wheezing", "chest tightness"],
+      "urgency_indicators": ["difficulty breathing", "blue lips", "severe chest pain"],
+      "typical_specialists": ["respiratory", "general_medicine"],
+      "typical_duration": 45
+    },
+    "cardiac": {
+      "common_symptoms": ["chest pain", "palpitations", "irregular heartbeat", "fatigue"],
+      "urgency_indicators": ["severe chest pain", "radiating pain", "difficulty breathing"],
+      "typical_specialists": ["cardiology", "general_medicine"],
+      "typical_duration": 60
+    },
+    "neurological": {
+      "common_symptoms": ["headache", "dizziness", "numbness", "memory issues"],
+      "urgency_indicators": ["sudden severe headache", "loss of consciousness", "seizure"],
+      "typical_specialists": ["neurology"],
+      "typical_duration": 60
+    },
+    "digestive": {
+      "common_symptoms": ["nausea", "abdominal pain", "vomiting", "diarrhea"],
+      "urgency_indicators": ["severe pain", "blood in stool", "persistent vomiting"],
+      "typical_specialists": ["gastroenterology", "general_medicine"],
+      "typical_duration": 45
+    },
+    "general": {
+      "common_symptoms": ["fever", "fatigue", "general discomfort", "minor pain"],
+      "urgency_indicators": ["high fever", "severe symptoms"],
+      "typical_specialists": ["general_medicine"],
+      "typical_duration": 30
+    },
+    "dermatological": {
+      "common_symptoms": ["rash", "itching", "skin discoloration", "lesions"],
+      "urgency_indicators": ["rapid spreading", "severe pain", "infection signs"],
+      "typical_specialists": ["dermatology"],
+      "typical_duration": 30
+    },
+    "musculoskeletal": {
+      "common_symptoms": ["joint pain", "back pain", "muscle aches", "stiffness"],
+      "urgency_indicators": ["inability to move", "severe pain", "deformity"],
+      "typical_specialists": ["orthopedics"],
+      "typical_duration": 45
+    }
+  },
+  "urgency_classification": {
+    "emergency_keywords": [
+      "severe pain",
+      "can't breathe",
+      "chest pain radiating",
+      "unconscious",
+      "bleeding heavily",
+      "severe bleeding",
+      "seizure",
+      "heart attack",
+      "stroke"
+    ],
+    "urgent_keywords": [
+      "sudden",
+      "acute",
+      "worsening rapidly",
+      "high fever",
+      "persistent pain",
+      "difficulty breathing",
+      "severe"
+    ],
+    "routine_keywords": [
+      "mild",
+      "occasional",
+      "checkup",
+      "routine",
+      "follow-up",
+      "general"
+    ]
+  },
+  "common_procedures": {
+    "general_checkup": {
+      "duration": 30,
+      "follow_up_needed": false,
+      "specialists": ["general_medicine"]
+    },
+    "specialist_consultation": {
+      "duration": 45,
+      "follow_up_needed": true,
+      "specialists": ["any_specialist"]
+    },
+    "diagnostic_review": {
+      "duration": 30,
+      "follow_up_needed": true,
+      "specialists": ["general_medicine"]
+    }
+  }
+}
