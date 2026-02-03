@@ -1,116 +1,136 @@
 import pytest
 from agents.gatekeeper import GatekeeperAgent
-from vector_store.mock_semantic_store import MockSemanticStore
+import ollama
 
 
 @pytest.fixture
 def gatekeeper():
-    """Create gatekeeper agent with mock semantic store."""
-    semantic_store = MockSemanticStore()
-    return GatekeeperAgent(semantic_store=semantic_store)
+    """Create a Gatekeeper agent instance."""
+    return GatekeeperAgent()
+
+
+def check_ollama_available():
+    """Check if Ollama is available and responsive."""
+    try:
+        ollama.list()
+        return True
+    except Exception:
+        return False
+
+
+# Skip tests that require Ollama if it's not available
+requires_ollama = pytest.mark.skipif(
+    not check_ollama_available(),
+    reason="Ollama is not running or not available"
+)
 
 
 def test_gatekeeper_initialization(gatekeeper):
-    """Test gatekeeper initializes correctly."""
-    assert gatekeeper is not None
+    """Test Gatekeeper initializes correctly."""
     assert gatekeeper.model is not None
+    assert gatekeeper.host is not None
 
 
-def test_extract_patient_info_structured(gatekeeper):
-    """Test extracting patient info from structured input."""
-    user_input = """
-    Patient Name: John Doe
-    Age: 45
-    Gender: Male
-    Symptoms: Persistent headache and dizziness for 3 days
-    """
+@requires_ollama
+def test_extract_pii_complete(gatekeeper):
+    """Test PII extraction with complete information."""
+    message = "Hi, I'm Sarah Johnson, 35 years old, female. I have a severe headache for 3 days."
     
-    patient_info = gatekeeper.extract_patient_info(user_input)
+    pii = gatekeeper.extract_pii(message)
     
-    assert "patient_name" in patient_info
-    assert "age" in patient_info
-    assert "gender" in patient_info
-    assert "symptoms" in patient_info
+    # Verify PII structure
+    assert 'patient_name' in pii
+    assert 'age' in pii
+    assert 'gender' in pii
+    assert 'medical_info' in pii
 
 
-def test_pseudonymize_input(gatekeeper):
-    """Test complete pseudonymization pipeline."""
-    user_input = """
-    Patient: Alice Johnson, 32 years old, Female
-    Symptoms: Severe cough and fever
-    """
-    
-    result = gatekeeper.pseudonymize_input(user_input)
-    
-    assert "patient_uuid" in result
-    assert "semantic_context" in result
-    assert result["cloud_safe"] is True
-    assert result["original_has_pii"] is True
-    
-    # Verify UUID format
-    assert len(result["patient_uuid"]) == 36
+@requires_ollama
+def test_extract_intent_appointment(gatekeeper):
+    """Test intent extraction for appointment."""
+    message = "I need to book an appointment for tomorrow"
+    intent = gatekeeper.extract_intent(message)
+    assert intent == "appointment"
 
 
+@requires_ollama
+def test_extract_intent_followup(gatekeeper):
+    """Test intent extraction for follow-up."""
+    message = "I need to schedule a follow-up visit"
+    intent = gatekeeper.extract_intent(message)
+    assert intent == "followup"
+
+
+@requires_ollama
+def test_extract_intent_summary(gatekeeper):
+    """Test intent extraction for summary."""
+    message = "Can I get my medical summary?"
+    intent = gatekeeper.extract_intent(message)
+    assert intent == "summary"
+
+
+@requires_ollama
 def test_semantic_context_no_pii(gatekeeper):
-    """Test that semantic context contains no PII."""
-    patient_info = {
-        "patient_name": "Bob Smith",
-        "age": 50,
-        "gender": "Male",
-        "symptoms": "Chest pain and shortness of breath"
-    }
+    """Test semantic context doesn't contain PII."""
+    medical_info = "Severe chest pain and difficulty breathing"
     
-    semantic_context = gatekeeper.extract_semantic_context(patient_info)
+    semantic = gatekeeper.extract_semantic_context(medical_info)
     
-    # Verify no PII in semantic context
-    import json
-    context_str = json.dumps(semantic_context).lower()
+    # Verify structure
+    assert 'symptom_category' in semantic
+    assert 'urgency_level' in semantic
+    assert 'requires_specialist' in semantic
+    assert 'estimated_duration' in semantic
     
-    assert "bob" not in context_str
-    assert "smith" not in context_str
-    assert "50" not in context_str
-    
-    # Should contain medical semantics
-    assert "symptom_category" in semantic_context or "category" in context_str
+    # Verify no PII leaked
+    semantic_str = str(semantic).lower()
+    assert 'name' not in semantic_str
+    assert 'age' not in semantic_str
 
 
-def test_reidentify_output(gatekeeper):
-    """Test re-identification of patient from UUID."""
-    # First pseudonymize
-    user_input = "Patient: Carol Davis, 35, Female. Symptoms: Back pain"
-    pseudo_result = gatekeeper.pseudonymize_input(user_input)
+@requires_ollama
+def test_process_message_complete_workflow(gatekeeper):
+    """Test complete message processing workflow."""
+    message = "Hello, I'm John Doe, 45 years old, male. I have persistent cough and fever."
     
-    patient_uuid = pseudo_result["patient_uuid"]
+    result = gatekeeper.process_message(message)
     
-    # Simulate cloud response
-    cloud_response = {
-        "patient_uuid": patient_uuid,
-        "appointment_scheduled": True,
-        "appointment_time": "2024-01-15 10:00"
-    }
+    # Verify structure
+    assert 'pii' in result
+    assert 'intent' in result
+    assert 'semantic_context' in result
+    assert 'original_message' in result
+    assert 'cloud_safe' in result
     
-    # Re-identify
-    final_output = gatekeeper.reidentify_output(patient_uuid, cloud_response)
+    # Verify cloud safety
+    assert result['cloud_safe'] is True
     
-    assert "patient_name" in final_output
-    assert final_output["reidentified"] is True
-    assert "Carol Davis" in final_output["patient_name"]
+    # Verify PII was extracted
+    assert result['pii']['patient_name'] is not None
+    
+    # Verify intent was classified
+    assert result['intent'] in ['appointment', 'followup', 'summary', 'general']
 
 
-def test_fallback_extraction(gatekeeper):
-    """Test fallback extraction when LLM fails."""
-    text = "David Miller, 40 years old, male, has severe headache"
+def test_fallback_semantic_extraction(gatekeeper):
+    """Test fallback semantic extraction."""
+    medical_info = "Severe chest pain"
     
-    result = gatekeeper._fallback_extraction(text)
+    semantic = gatekeeper._fallback_semantic_extraction(medical_info)
     
-    assert result["patient_name"] != "Unknown Patient"
-    assert result["age"] == 40
-    assert result["gender"] == "Male"
+    assert semantic['symptom_category'] == 'cardiac'
+    assert semantic['urgency_level'] == 'emergency'
+    assert semantic['requires_specialist'] is True
 
 
-@pytest.mark.skip(reason="Requires Ollama running")
-def test_ollama_call(gatekeeper):
-    """Test calling Ollama LLM (requires Ollama installed)."""
-    response = gatekeeper._call_ollama("Say 'test successful'")
-    assert response is not None
-    assert len(response) > 0
+def test_extract_pii_minimal_info(gatekeeper):
+    """Test PII extraction with minimal information."""
+    message = "I have a headache"
+    
+    pii = gatekeeper.extract_pii(message)
+    
+    # Should still return structure
+    assert 'patient_name' in pii
+    assert 'medical_info' in pii
+    # Medical info should contain the symptom (either full message or extracted symptom)
+    assert 'headache' in pii['medical_info'].lower()

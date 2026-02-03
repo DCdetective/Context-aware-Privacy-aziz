@@ -1,10 +1,9 @@
 import ollama
 import json
 import re
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Optional, Tuple
 import logging
 
-from database.identity_vault import identity_vault
 from utils.config import settings
 
 logger = logging.getLogger(__name__)
@@ -21,11 +20,10 @@ class GatekeeperAgent:
     - Ensures NO PII reaches cloud agents
     """
     
-    def __init__(self, semantic_store=None):
+    def __init__(self):
         """Initialize Gatekeeper Agent."""
         self.model = settings.ollama_model
         self.host = settings.ollama_host
-        self.semantic_store = semantic_store
         
         logger.info(f"Gatekeeper Agent initialized with model: {self.model}")
         logger.info(f"Ollama host: {self.host}")
@@ -66,30 +64,32 @@ class GatekeeperAgent:
             logger.error(f"Error calling Ollama: {str(e)}")
             raise
     
-    def extract_patient_info(self, user_input: str) -> Dict[str, Any]:
+    def extract_pii(self, user_message: str) -> Dict[str, Any]:
         """
-        Extract patient information from natural language input.
+        Extract PII from natural language user message.
         
         Args:
-            user_input: Raw user input containing patient details
+            user_message: Raw user input from chatbot
             
         Returns:
-            Dictionary with extracted patient information
+            Dictionary with extracted PII
         """
-        logger.info("Extracting patient information from input...")
+        logger.info("Extracting PII from user message...")
         
         system_prompt = """You are a medical information extraction assistant.
 Extract patient details from the input and return ONLY a JSON object with these fields:
-- patient_name: Full name of the patient
-- age: Age as an integer
-- gender: Gender (Male/Female/Other)
-- symptoms: Description of symptoms or medical condition
+- patient_name: Full name of the patient (string, or null if not mentioned)
+- age: Age as an integer (or null if not mentioned)
+- gender: Gender (Male/Female/Other, or null if not mentioned)
+- medical_info: Medical symptoms, conditions, or reason for contact (string)
+
+IMPORTANT: If information is not explicitly mentioned, use null. Do not guess.
 
 Return ONLY valid JSON, no additional text."""
         
-        prompt = f"""Extract patient information from this text:
+        prompt = f"""Extract patient information from this message:
 
-"{user_input}"
+"{user_message}"
 
 Return JSON format only."""
         
@@ -97,214 +97,96 @@ Return JSON format only."""
             response = self._call_ollama(prompt, system_prompt)
             
             # Parse JSON from response
-            # Clean up response to extract JSON
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
-                patient_info = json.loads(json_match.group())
+                pii_data = json.loads(json_match.group())
             else:
-                patient_info = json.loads(response)
+                pii_data = json.loads(response)
             
-            logger.info(f"Extracted patient info: {patient_info.get('patient_name', 'Unknown')}")
-            return patient_info
+            # Ensure all fields exist
+            pii_data.setdefault('patient_name', None)
+            pii_data.setdefault('age', None)
+            pii_data.setdefault('gender', None)
+            pii_data.setdefault('medical_info', user_message)
+            
+            logger.info(f"Extracted PII: {pii_data.get('patient_name', 'No name found')}")
+            return pii_data
             
         except Exception as e:
-            logger.error(f"Error extracting patient info: {str(e)}")
-            # Fallback: try to extract using regex
-            return self._fallback_extraction(user_input)
+            logger.error(f"Error extracting PII: {str(e)}")
+            # Fallback: return minimal structure
+            return {
+                'patient_name': None,
+                'age': None,
+                'gender': None,
+                'medical_info': user_message
+            }
     
-    def _fallback_extraction(self, text: str) -> Dict[str, Any]:
+    def extract_intent(self, user_message: str) -> str:
         """
-        Fallback extraction using regex patterns.
+        Extract user intent from message.
         
         Args:
-            text: Input text
+            user_message: User input message
             
         Returns:
-            Extracted patient information
+            Intent: 'appointment', 'followup', 'summary', or 'general'
         """
-        logger.warning("Using fallback extraction method")
+        system_prompt = """You are an intent classifier for a medical chatbot.
+Classify the user's intent into ONE of these categories:
+- appointment: User wants to book a new appointment
+- followup: User wants to schedule a follow-up visit
+- summary: User wants a medical summary or record
+- general: General query or unclear intent
+
+Return ONLY the intent word, nothing else."""
         
-        info = {
-            "patient_name": "Unknown Patient",
-            "age": 0,
-            "gender": "Unknown",
-            "symptoms": text
-        }
+        prompt = f"""Classify the intent of this message:
+
+"{user_message}"
+
+Return only: appointment, followup, summary, or general"""
         
-        # Try to parse as JSON first (in case it's structured data)
         try:
-            # Check if text looks like JSON
-            if text.strip().startswith('{'):
-                parsed = json.loads(text)
-                if "patient_name" in parsed:
-                    info["patient_name"] = parsed["patient_name"]
-                if "age" in parsed:
-                    info["age"] = parsed["age"]
-                if "gender" in parsed:
-                    info["gender"] = parsed["gender"]
-                if "symptoms" in parsed:
-                    info["symptoms"] = parsed["symptoms"]
-                return info
-        except:
-            pass
-        
-        # Try to extract name patterns (expanded patterns)
-        name_patterns = [
-            r"patient_name[\"']?\s*:\s*[\"']([^\"']+)[\"']",  # JSON-like format
-            r"(?:Patient Name|Name):\s*([A-Z][a-zA-Z0-9\s-]+?)(?=\s*,\s*Age:|\s*\n|\s*Age:|\s*Gender:)",  # Structured format - capture until comma+field or newline
-            r"(?:name is |named |patient |I'm |I am )([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
-            r"Patient:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",  # Patient: Name format
-            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:,| is| -)"
-        ]
-        
-        for pattern in name_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                info["patient_name"] = match.group(1).strip()
-                break
-        
-        # Try to extract age (expanded patterns)
-        age_patterns = [
-            r"age[\"']?\s*:\s*(\d{1,3})",  # JSON-like format
-            r"Age:\s*(\d{1,3})",  # Structured format
-            r"(\d{1,3})\s*(?:years old|yr|y\.o\.|age)",
-            r",\s*(\d{1,3})\s*(?:years old|,|$)"
-        ]
-        
-        for pattern in age_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                info["age"] = int(match.group(1))
-                break
-        
-        # Try to extract gender (expanded patterns)
-        gender_patterns = [
-            r"gender[\"']?\s*:\s*[\"']?(Female|Male|Other)[\"']?",  # JSON-like format
-            r"Gender:\s*(Female|Male|Other)",  # Structured format - Female first to match before Male
-            r"\b(female|woman|girl)\b",
-            r"\b(male|man|boy)\b"
-        ]
-        
-        for pattern in gender_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                gender_text = match.group(1).lower()
-                if "female" in gender_text or "woman" in gender_text or "girl" in gender_text:
-                    info["gender"] = "Female"
-                elif "male" in gender_text or "man" in gender_text or "boy" in gender_text:
-                    info["gender"] = "Male"
-                else:
-                    info["gender"] = match.group(1).capitalize()
-                break
-        
-        # Try to extract symptoms
-        symptoms_patterns = [
-            r"symptoms[\"']?\s*:\s*[\"']([^\"']+)[\"']",  # JSON-like format
-            r"Symptoms?:\s*(.+?)(?:\n|$)",  # Structured format
-        ]
-        
-        for pattern in symptoms_patterns:
-            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-            if match:
-                info["symptoms"] = match.group(1).strip()
-                break
-        
-        return info
-    
-    def pseudonymize_input(self, user_input: str) -> Dict[str, Any]:
-        """
-        Main pseudonymization pipeline.
-        
-        1. Extract patient PII from input
-        2. Generate/retrieve UUID from Identity Vault
-        3. Extract semantic medical context
-        4. Return pseudonymized data structure
-        
-        Args:
-            user_input: Raw user input
+            response = self._call_ollama(prompt, system_prompt).strip().lower()
             
-        Returns:
-            Dictionary with pseudonymized data
-        """
-        logger.info("=" * 60)
-        logger.info("GATEKEEPER: Starting pseudonymization pipeline")
-        logger.info("=" * 60)
-        
-        # Step 1: Extract PII
-        patient_info = self.extract_patient_info(user_input)
-        logger.info(f"Step 1: Extracted PII for {patient_info['patient_name']}")
-        
-        # Step 2: Pseudonymize using Identity Vault
-        patient_uuid, is_new = identity_vault.pseudonymize_patient(
-            patient_name=patient_info['patient_name'],
-            age=patient_info['age'],
-            gender=patient_info['gender'],
-            component="gatekeeper_agent"
-        )
-        logger.info(f"Step 2: Pseudonymized to UUID: {patient_uuid}")
-        logger.info(f"         New patient: {is_new}")
-        
-        # Step 3: Extract semantic context (non-PII)
-        semantic_context = self.extract_semantic_context(patient_info)
-        logger.info(f"Step 3: Extracted semantic context")
-        
-        # Step 4: Store semantic anchors if store is available
-        if self.semantic_store:
-            try:
-                anchor_id = self.semantic_store.store_semantic_anchor(
-                    patient_uuid=patient_uuid,
-                    anchor_type="medical_context",
-                    semantic_data=semantic_context
-                )
-                logger.info(f"Step 4: Stored semantic anchor: {anchor_id}")
-            except Exception as e:
-                logger.warning(f"Could not store semantic anchor: {str(e)}")
-        
-        # Step 5: Create pseudonymized output
-        pseudonymized_data = {
-            "patient_uuid": patient_uuid,
-            "is_new_patient": is_new,
-            "semantic_context": semantic_context,
-            "original_has_pii": True,
-            "cloud_safe": True
-        }
-        
-        logger.info("=" * 60)
-        logger.info("GATEKEEPER: Pseudonymization complete")
-        logger.info(f"UUID: {patient_uuid}")
-        logger.info(f"Cloud-safe: {pseudonymized_data['cloud_safe']}")
-        logger.info("=" * 60)
-        
-        return pseudonymized_data
+            # Validate intent
+            valid_intents = ['appointment', 'followup', 'summary', 'general']
+            for intent in valid_intents:
+                if intent in response:
+                    return intent
+            
+            return 'general'
+            
+        except Exception as e:
+            logger.error(f"Error extracting intent: {str(e)}")
+            return 'general'
     
-    def extract_semantic_context(self, patient_info: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_semantic_context(self, medical_info: str) -> Dict[str, Any]:
         """
         Extract non-PII semantic medical context.
         
-        This method extracts medical information that is safe to store
+        This extracts medical information that is safe to store
         in the cloud (Pinecone) without revealing patient identity.
         
         Args:
-            patient_info: Patient information dictionary
+            medical_info: Medical information string
             
         Returns:
             Dictionary with semantic (non-PII) medical context
         """
-        symptoms = patient_info.get('symptoms', '')
-        
-        # Use LLM to extract semantic features
-        system_prompt = """Extract semantic medical features from symptoms.
-Return ONLY JSON with these fields (no PII like names/ages):
-- symptom_category: General category (e.g., "respiratory", "cardiac", "neurological")
+        system_prompt = """Extract semantic medical features from the description.
+Return ONLY JSON with these fields (no PII like names/exact ages):
+- symptom_category: General category (e.g., "respiratory", "cardiac", "neurological", "general")
 - urgency_level: "routine", "urgent", or "emergency"
-- requires_specialist: true/false
-- estimated_consultation_time: minutes (integer)
+- requires_specialist: true or false
+- estimated_duration: estimated consultation time in minutes (15, 30, 45, or 60)
 
 Return ONLY valid JSON."""
         
-        prompt = f"""Analyze these symptoms and extract semantic features:
+        prompt = f"""Analyze this medical information and extract semantic features:
 
-Symptoms: {symptoms}
+Medical Info: {medical_info}
 
 Return JSON only."""
         
@@ -318,93 +200,100 @@ Return JSON only."""
             else:
                 semantic_data = json.loads(response)
             
-            # Ensure no PII leaked
+            # Validate no PII leaked
             semantic_str = json.dumps(semantic_data).lower()
-            if any(term in semantic_str for term in ['name', 'age', 'gender']):
+            if any(term in semantic_str for term in ['name', 'age', 'years old']):
                 logger.warning("PII detected in semantic extraction, using fallback")
-                return self._fallback_semantic_extraction(symptoms)
+                return self._fallback_semantic_extraction(medical_info)
             
             return semantic_data
             
         except Exception as e:
             logger.warning(f"Error in semantic extraction: {str(e)}")
-            return self._fallback_semantic_extraction(symptoms)
+            return self._fallback_semantic_extraction(medical_info)
     
-    def _fallback_semantic_extraction(self, symptoms: str) -> Dict[str, Any]:
+    def _fallback_semantic_extraction(self, medical_info: str) -> Dict[str, Any]:
         """
         Fallback semantic extraction without LLM.
         
         Args:
-            symptoms: Symptom description
+            medical_info: Medical information
             
         Returns:
             Basic semantic context
         """
-        # Simple keyword-based categorization
-        symptoms_lower = symptoms.lower()
+        info_lower = medical_info.lower()
         
+        # Determine category
         category = "general"
-        if any(term in symptoms_lower for term in ['cough', 'breathing', 'chest']):
+        if any(term in info_lower for term in ['cough', 'breathing', 'lung', 'respiratory']):
             category = "respiratory"
-        elif any(term in symptoms_lower for term in ['heart', 'cardiac', 'chest pain']):
+        elif any(term in info_lower for term in ['heart', 'cardiac', 'chest pain']):
             category = "cardiac"
-        elif any(term in symptoms_lower for term in ['headache', 'dizzy', 'neurological']):
+        elif any(term in info_lower for term in ['headache', 'dizzy', 'neurological', 'brain']):
             category = "neurological"
+        elif any(term in info_lower for term in ['stomach', 'digestive', 'nausea', 'abdominal']):
+            category = "digestive"
         
+        # Determine urgency
         urgency = "routine"
-        if any(term in symptoms_lower for term in ['severe', 'emergency', 'critical']):
+        if any(term in info_lower for term in ['emergency', 'severe', 'critical', 'immediately']):
             urgency = "emergency"
-        elif any(term in symptoms_lower for term in ['urgent', 'acute', 'sudden']):
+        elif any(term in info_lower for term in ['urgent', 'acute', 'sudden', 'quickly']):
             urgency = "urgent"
         
         return {
             "symptom_category": category,
             "urgency_level": urgency,
             "requires_specialist": urgency in ["urgent", "emergency"],
-            "estimated_consultation_time": 30
+            "estimated_duration": 30
         }
     
-    def reidentify_output(self, patient_uuid: str, cloud_response: Dict[str, Any]) -> Dict[str, Any]:
+    def process_message(self, user_message: str) -> Dict[str, Any]:
         """
-        Re-identify patient for final output display.
+        Main processing pipeline for incoming user messages.
         
-        This is the ONLY place where pseudonymized data is converted
-        back to real patient identity before presenting to the user.
+        Workflow:
+        1. Extract PII from message
+        2. Extract intent
+        3. Extract semantic context
+        4. Return structured data for coordinator
         
         Args:
-            patient_uuid: Pseudonymized patient UUID
-            cloud_response: Response from cloud agents
+            user_message: Raw user input
             
         Returns:
-            Response with real patient identity restored
+            Processed message data ready for cloud agents
         """
         logger.info("=" * 60)
-        logger.info("GATEKEEPER: Re-identifying patient for output")
+        logger.info("GATEKEEPER: Processing user message")
         logger.info("=" * 60)
         
-        # Retrieve real identity from vault
-        identity = identity_vault.reidentify_patient(
-            patient_uuid=patient_uuid,
-            component="gatekeeper_agent"
-        )
+        # Step 1: Extract PII
+        pii_data = self.extract_pii(user_message)
+        logger.info(f"Step 1: PII extracted")
         
-        if not identity:
-            logger.error(f"Could not re-identify patient: {patient_uuid}")
-            return cloud_response
+        # Step 2: Extract intent
+        intent = self.extract_intent(user_message)
+        logger.info(f"Step 2: Intent identified: {intent}")
         
-        # Merge identity with cloud response
-        output = {
-            **cloud_response,
-            "patient_name": identity["patient_name"],
-            "patient_age": identity["age"],
-            "patient_gender": identity["gender"],
-            "reidentified": True
+        # Step 3: Extract semantic context
+        semantic_context = self.extract_semantic_context(pii_data['medical_info'])
+        logger.info(f"Step 3: Semantic context extracted")
+        
+        # Step 4: Prepare output
+        processed_data = {
+            'pii': pii_data,
+            'intent': intent,
+            'semantic_context': semantic_context,
+            'original_message': user_message,
+            'cloud_safe': True
         }
         
-        logger.info(f"Re-identified patient: {identity['patient_name']}")
+        logger.info("GATEKEEPER: Message processed successfully")
         logger.info("=" * 60)
         
-        return output
+        return processed_data
 
 
 # Global instance
