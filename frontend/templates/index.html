@@ -3,97 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedShield - Medical Assistant</title>
+    <title>MedShield</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/chatbot.css">
 </head>
 <body>
     <div class="app">
-        <header class="topbar">
-            <div class="topbar-inner">
-                <div class="brand" aria-label="MedShield">
-                    <span class="brand-logo">🏥</span>
-                    <span class="brand-name">MedShield</span>
-                </div>
-
-                <div class="topbar-right">
-                    <span class="pill pill--privacy" title="No PII leaves the local environment">
-                        🔒 Privacy protected
-                    </span>
+        <div class="chat-container">
+            <!-- Messages area -->
+            <div class="messages" id="chatMessages">
+                <!-- Welcome message -->
+                <div class="message assistant">
+                    <div class="bubble">
+                        <p>Hello, I'm MedShield, your privacy-preserving medical assistant.</p>
+                        <p>I can help you with booking appointments, scheduling follow-ups, generating medical summaries, and answering general medical queries.</p>
+                        <p>How can I help you today?</p>
+                    </div>
                 </div>
             </div>
-        </header>
 
-        <main class="chat">
-            <div class="chat-scroll" id="chatMessages">
-                <!-- Welcome message (assistant row) -->
-                <div class="chat-row chat-row--assistant">
-                    <div class="chat-row-inner">
-                        <div class="avatar" aria-hidden="true">🤖</div>
-                        <div class="chat-content">
-                            <div class="chat-text">
-                                <p>Hello! I'm MedShield, your privacy-preserving medical assistant.</p>
-                                <p>I can help you with:</p>
-                                <ul>
-                                    <li>📅 Booking appointments</li>
-                                    <li>🔄 Scheduling follow-ups</li>
-                                    <li>📋 Generating medical summaries</li>
-                                    <li>❓ General medical queries</li>
-                                </ul>
-                                <p>How can I help?</p>
-                            </div>
+            <!-- Typing indicator -->
+            <div class="typing-container" id="typingIndicator" style="display: none;">
+                <div class="message assistant">
+                    <div class="bubble typing-bubble">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="typing" id="typingIndicator" style="display:none;">
-                <div class="chat-row chat-row--assistant chat-row--typing">
-                    <div class="chat-row-inner">
-                        <div class="avatar" aria-hidden="true">🤖</div>
-                        <div class="chat-content">
-                            <div class="typing-dots" aria-label="Assistant is typing">
-                                <span></span><span></span><span></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="composer">
-                <div class="composer-inner">
-                    <form id="chatForm" class="composer-form">
+            <!-- Input area -->
+            <div class="input-bar">
+                <form id="chatForm" class="input-form">
+                    <div class="input-wrapper">
                         <textarea
                             id="messageInput"
                             rows="1"
-                            maxlength="1000"
-                            placeholder="Message MedShield…"
+                            maxlength="2000"
+                            placeholder="Send a message..."
+                            aria-label="Message input"
                         ></textarea>
-                        <button type="submit" class="composer-send" id="sendButton" aria-label="Send">
-                            <span aria-hidden="true">➤</span>
+                        <button type="submit" class="send-btn" id="sendButton" aria-label="Send message">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M7 11L12 6L17 11M12 18V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 12 12)"/>
+                            </svg>
                         </button>
-                    </form>
-                    <div class="composer-hint">Tip: include your name, age, and medical concern for better assistance.</div>
-                </div>
+                    </div>
+                </form>
+                <div class="input-hint">Press Enter to send, Shift+Enter for new line</div>
             </div>
-        </main>
+        </div>
 
-        <!-- Privacy Visualization Sidebar (collapsed by default to keep chat full-width) -->
+        <!-- Privacy sidebar (hidden by default, accessible via keyboard shortcut or future button) -->
         <aside class="privacy-sidebar collapsed" id="privacySidebar" aria-label="Privacy Monitor">
             <div class="sidebar-header">
-                <h3>🔐 Privacy Monitor</h3>
+                <span class="sidebar-title">Privacy Monitor</span>
                 <div class="sidebar-actions">
-                    <button class="icon-button" id="refreshPrivacy" title="Refresh">🔄</button>
-                    <button class="toggle-button" id="toggleSidebar" aria-label="Hide privacy monitor">−</button>
+                    <button class="sidebar-btn" id="refreshPrivacy" type="button" title="Refresh">Refresh</button>
+                    <button class="sidebar-btn" id="toggleSidebar" type="button" aria-label="Close">Close</button>
                 </div>
             </div>
             <div class="sidebar-content" id="sidebarContent">
-                <p class="sidebar-description">Track how your data is protected at every step.</p>
+                <p class="sidebar-description">Data protection steps are shown here during processing.</p>
                 <div id="privacySteps" class="privacy-steps"></div>
             </div>
         </aside>
 
-        <button class="show-privacy-button" id="showPrivacyButton">
-            🔐 Privacy
+        <!-- Privacy toggle button (minimal, bottom-right) -->
+        <button class="privacy-toggle" id="showPrivacyButton" type="button" title="Privacy Monitor">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
         </button>
     </div>
 

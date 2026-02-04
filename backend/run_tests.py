@@ -28,17 +28,21 @@ def main():
     print("MedShield - Comprehensive Test Suite")
     print("=" * 70)
     
+    # Resolve paths relative to this file, so the runner works from any CWD.
+    base_dir = __file__.rsplit("/", 1)[0] if "/" in __file__ else __file__.rsplit("\\", 1)[0]
+    tests_dir = f"{base_dir}/tests"
+
     test_suites = [
-        ("Setup Tests", "tests/test_setup.py"),
-        ("Identity Vault Tests", "tests/test_identity_vault.py"),
-        ("Semantic Store Tests", "tests/test_semantic_store.py"),
-        ("Gatekeeper Agent Tests", "tests/test_gatekeeper.py"),
-        ("Coordinator Agent Tests", "tests/test_coordinator.py"),
-        ("Worker Agent Tests", "tests/test_worker.py"),
-        ("API Routes Tests", "tests/test_api_routes.py"),
-        ("End-to-End Tests", "tests/test_e2e_workflow.py"),
-        ("Privacy Compliance Tests", "tests/test_privacy_compliance.py"),
-        ("Performance Tests", "tests/test_performance.py"),
+        ("Setup Tests", f"{tests_dir}/test_setup.py"),
+        ("Identity Vault Tests", f"{tests_dir}/test_identity_vault.py"),
+        ("Semantic Store Tests", f"{tests_dir}/test_semantic_store.py"),
+        ("Gatekeeper Agent Tests", f"{tests_dir}/test_gatekeeper.py"),
+        ("Coordinator Agent Tests", f"{tests_dir}/test_coordinator.py"),
+        ("Worker Agent Tests", f"{tests_dir}/test_worker.py"),
+        ("API Routes Tests", f"{tests_dir}/test_api_routes.py"),
+        ("End-to-End Tests", f"{tests_dir}/test_e2e_workflow.py"),
+        ("Privacy Compliance Tests", f"{tests_dir}/test_privacy_compliance.py"),
+        ("Performance Tests", f"{tests_dir}/test_performance.py"),
     ]
     
     results = {}
