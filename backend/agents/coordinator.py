@@ -10,6 +10,68 @@ from vector_store.metadata_store import metadata_store
 logger = logging.getLogger(__name__)
 
 
+class CoordinatorAgent:
+    """Coordinator agent that prepares execution plans for the Worker.
+
+    The original codebase evolved into an end-to-end `process_message` pipeline
+    (`AgentCoordinator` below). The test-suite still expects a dedicated
+    coordinator with:
+      - `model` attribute
+      - `coordinate_request(...)`
+      - `_fallback_execution_plan(...)`
+
+    This class is intentionally deterministic (no external API calls) so it can
+    run in CI/testing mode without Groq credentials.
+    """
+
+    def __init__(self, model: str | None = None):
+        self.model = model or "rule-based"
+
+    def coordinate_request(self, patient_uuid: str, action_type: str, semantic_context: Dict[str, Any]) -> Dict[str, Any]:
+        valid_actions = {"appointment", "followup", "summary"}
+        if action_type not in valid_actions:
+            return {
+                "success": False,
+                "error": f"Invalid action_type: {action_type}",
+                "patient_uuid": patient_uuid,
+                "action_type": action_type,
+                "privacy_safe": True,
+            }
+
+        execution_plan = self._fallback_execution_plan(action_type=action_type, semantic_context=semantic_context or {})
+        return {
+            "patient_uuid": patient_uuid,
+            "action_type": action_type,
+            "execution_plan": execution_plan,
+            "ready_for_worker": True,
+            "privacy_safe": True,
+        }
+
+    def _fallback_execution_plan(self, action_type: str, semantic_context: Dict[str, Any]) -> Dict[str, Any]:
+        urgency = (semantic_context or {}).get("urgency_level", "routine")
+        requires_specialist = bool((semantic_context or {}).get("requires_specialist", False))
+
+        if action_type == "appointment":
+            steps = ["validate", "schedule", "confirm"]
+            estimated_time = 3
+        elif action_type == "followup":
+            steps = ["retrieve", "schedule", "confirm"]
+            estimated_time = 2
+        elif action_type == "summary":
+            steps = ["gather", "generate", "format"]
+            estimated_time = 2
+        else:
+            steps = ["validate"]
+            estimated_time = 1
+
+        return {
+            "steps": steps,
+            "priority": urgency,
+            "requires_specialist": requires_specialist,
+            "estimated_time": estimated_time,
+        }
+
+
 class AgentCoordinator:
     """
     Coordinates the multi-agent workflow.

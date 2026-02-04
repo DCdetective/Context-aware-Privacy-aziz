@@ -29,6 +29,7 @@ from vector_store.mock_stores import MockMetadataStore, MockSyntheticStore
 # Import agents and inject dependencies
 from agents.gatekeeper import gatekeeper_agent
 from agents.worker import worker_agent
+from agents.coordinator import coordinator_agent
 
 # Inject semantic store into agents
 gatekeeper_agent.semantic_store = semantic_store
@@ -98,20 +99,43 @@ async def startup_event():
     logger.info("🚀 System Ready")
     logger.info("=" * 60)
 
+# Resolve frontend paths robustly (do not rely on current working directory)
+BACKEND_DIR = Path(__file__).resolve().parent
+FRONTEND_DIR = (BACKEND_DIR.parent / "frontend").resolve()
+STATIC_DIR = (FRONTEND_DIR / "static").resolve()
+TEMPLATES_DIR = (FRONTEND_DIR / "templates").resolve()
+
 # Mount static files
-app.mount("/static", StaticFiles(directory="../frontend/static"), name="static")
+# Note: StaticFiles checks existence at import time, so use absolute paths.
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Setup templates
-templates = Jinja2Templates(directory="../frontend/templates")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Health check endpoint
 @app.get("/health")
 async def health_check():
     """Health check endpoint for system status."""
+    # Keep this lightweight and safe to call during tests (no external API calls).
+    components = {
+        "identity_vault": "operational" if identity_vault is not None else "down",
+        "semantic_store": "operational" if semantic_store is not None else "down",
+        "gatekeeper_agent": "operational" if gatekeeper_agent is not None else "down",
+        "coordinator_agent": "operational" if coordinator_agent is not None else "down",
+        "worker_agent": "operational" if worker_agent is not None else "down",
+    }
+
+    # Optional metric (some stores may not expose it)
+    try:
+        components["semantic_store_vectors"] = getattr(semantic_store, "vector_count", None)
+    except Exception:
+        components["semantic_store_vectors"] = None
+
     return {
         "status": "healthy",
         "service": "MedShield v2",
-        "version": "2.0.0"
+        "version": "2.0.0",
+        "components": components,
     }
 
 # Frontend page routes

@@ -359,6 +359,15 @@ class IdentityVault:
         finally:
             session.close()
     
+    def get_audit_trail(
+        self,
+        patient_uuid: Optional[str] = None,
+        operation: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Backward-compatible alias for `get_audit_logs`."""
+        return self.get_audit_logs(patient_uuid=patient_uuid, operation=operation, limit=limit)
+
     def get_audit_logs(
         self,
         patient_uuid: Optional[str] = None,

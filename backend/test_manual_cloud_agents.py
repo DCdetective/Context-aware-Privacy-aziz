@@ -1,55 +1,71 @@
+"""Manual smoke test for cloud agents.
+
+This is intentionally NOT part of the automated pytest suite.
+Run manually:
+    python backend/test_manual_cloud_agents.py
+"""
+
+# Prevent pytest from collecting/importing this module as a test
+__test__ = False
+
 from agents.coordinator import coordinator
 from agents.worker import worker_agent
 from agents.gatekeeper import gatekeeper_agent
 from vector_store.mock_semantic_store import MockSemanticStore
 
-# Initialize worker with semantic store
-semantic_store = MockSemanticStore()
-worker_agent.semantic_store = semantic_store
 
-print("=" * 60)
-print("Testing Cloud Agents (Coordinator + Worker)")
-print("=" * 60)
+def main() -> None:
+    # Initialize worker with semantic store
+    semantic_store = MockSemanticStore()
+    worker_agent.semantic_store = semantic_store
 
-# Simulate pseudonymized input from Gatekeeper
-user_input = "Patient: Test Cloud Patient, 35, Male. Symptoms: Headache"
-pseudo_data = gatekeeper_agent.pseudonymize_input(user_input)
+    print("=" * 60)
+    print("Testing Cloud Agents (Coordinator + Worker)")
+    print("=" * 60)
 
-patient_uuid = pseudo_data["patient_uuid"]
-semantic_context = pseudo_data["semantic_context"]
+    # Simulate pseudonymized input from Gatekeeper
+    user_input = "Patient: Test Cloud Patient, 35, Male. Symptoms: Headache"
+    pseudo_data = gatekeeper_agent.pseudonymize_input(user_input)
 
-print(f"\n[PSEUDONYMIZED DATA]")
-print(f"UUID: {patient_uuid}")
-print(f"Semantic: {semantic_context}")
+    patient_uuid = pseudo_data["patient_uuid"]
+    semantic_context = pseudo_data["semantic_context"]
 
-# Step 1: Coordinator plans the task
-print(f"\n[COORDINATOR]")
-coord_result = coordinator.coordinate_request(
-    patient_uuid=patient_uuid,
-    action_type="appointment",
-    semantic_context=semantic_context
-)
+    print(f"\n[PSEUDONYMIZED DATA]")
+    print(f"UUID: {patient_uuid}")
+    print(f"Semantic: {semantic_context}")
 
-print(f"Plan created: {coord_result['execution_plan']['steps']}")
+    # Step 1: Coordinator plans the task
+    print(f"\n[COORDINATOR]")
+    coord_result = coordinator.coordinate_request(
+        patient_uuid=patient_uuid,
+        action_type="appointment",
+        semantic_context=semantic_context,
+    )
 
-# Step 2: Worker executes the task
-print(f"\n[WORKER]")
-worker_result = worker_agent.execute_task(
-    patient_uuid=patient_uuid,
-    action_type="appointment",
-    execution_plan=coord_result["execution_plan"],
-    semantic_context=semantic_context
-)
+    print(f"Plan created: {coord_result['execution_plan']['steps']}")
 
-print(f"Success: {worker_result['success']}")
-print(f"Action: {worker_result['action']}")
-print(f"Appointment Time: {worker_result.get('appointment_time')}")
+    # Step 2: Worker executes the task
+    print(f"\n[WORKER]")
+    worker_result = worker_agent.execute_task(
+        patient_uuid=patient_uuid,
+        action_type="appointment",
+        execution_plan=coord_result["execution_plan"],
+        semantic_context=semantic_context,
+    )
 
-# Step 3: Gatekeeper re-identifies for output
-print(f"\n[RE-IDENTIFICATION]")
-final_output = gatekeeper_agent.reidentify_output(patient_uuid, worker_result)
+    print(f"Success: {worker_result['success']}")
+    print(f"Action: {worker_result['action']}")
+    print(f"Appointment Time: {worker_result.get('appointment_time')}")
 
-print(f"Patient Name: {final_output.get('patient_name')}")
-print(f"Appointment: {final_output.get('appointment_time')}")
+    # Step 3: Gatekeeper re-identifies for output
+    print(f"\n[RE-IDENTIFICATION]")
+    final_output = gatekeeper_agent.reidentify_output(patient_uuid, worker_result)
 
-print("\n" + "=" * 60)
+    print(f"Patient Name: {final_output.get('patient_name')}")
+    print(f"Appointment: {final_output.get('appointment_time')}")
+
+    print("\n" + "=" * 60)
+
+
+if __name__ == "__main__":
+    main()

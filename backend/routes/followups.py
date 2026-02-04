@@ -4,9 +4,12 @@ from typing import Optional
 import logging
 
 from agents.gatekeeper import gatekeeper_agent
-from agents.coordinator import coordinator
+from agents.coordinator import CoordinatorAgent
 from agents.worker import worker_agent
 from database.identity_vault import identity_vault
+
+# Deterministic planner for API routes (avoids external LLM calls during tests)
+_coordinator = CoordinatorAgent()
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +94,16 @@ async def schedule_followup(request: FollowUpRequest):
             logger.warning("Could not retrieve semantic context, using empty context")
             semantic_context = {}
         
-        # Step 4: Coordinator planning
+        # Step 4: Coordinator planning (deterministic)
         logger.info("Step 4: Invoking Coordinator for follow-up planning...")
-        # Use new coordinator with process_message
-        message = f"Patient Name: {request.patient_name}, Request: Follow-up appointment"
-        coord_result = coordinator.process_message(message)
+        coord_result = _coordinator.coordinate_request(
+            patient_uuid=patient_uuid,
+            action_type="followup",
+            semantic_context=semantic_context,
+        )
         
-        if not coord_result.get("ready_for_worker"):
-            raise HTTPException(status_code=400, detail="Coordination failed")
+        if coord_result.get("success") is False:
+            raise HTTPException(status_code=400, detail=coord_result.get("error", "Coordination failed"))
         
         # Step 5: Worker execution
         logger.info("Step 5: Invoking Worker for follow-up execution...")

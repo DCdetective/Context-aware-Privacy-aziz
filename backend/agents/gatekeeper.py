@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, Tuple
 import logging
 
 from utils.config import settings
+from database.identity_vault import identity_vault
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +250,70 @@ Return JSON only."""
             "estimated_duration": 30
         }
     
+    def pseudonymize_input(self, user_message: str) -> Dict[str, Any]:
+        """Compatibility helper used by older scripts.
+
+        Returns pseudonymized payload suitable for cloud agents:
+        {patient_uuid, semantic_context, intent}
+
+        In `TESTING_MODE`, this avoids Ollama calls entirely to keep tests fast
+        and deterministic.
+        """
+        if settings.testing_mode:
+            # Minimal, deterministic extraction: handle patterns like
+            # "Patient Name: X\nAge: 45\nGender: Male\nSymptoms: ..."
+            # Capture up to comma or newline to avoid swallowing the rest of the line.
+            name_match = re.search(r"patient\s*name\s*:\s*([^,\n]+)", user_message, re.IGNORECASE)
+            age_match = re.search(r"age\s*:\s*(\d+)", user_message, re.IGNORECASE)
+            gender_match = re.search(r"gender\s*:\s*([^,\n]+)", user_message, re.IGNORECASE)
+            symptoms_match = re.search(r"symptoms\s*:\s*(.+)", user_message, re.IGNORECASE | re.DOTALL)
+
+            pii = {
+                "patient_name": name_match.group(1).strip() if name_match else None,
+                "age": int(age_match.group(1)) if age_match else None,
+                "gender": gender_match.group(1).strip() if gender_match else None,
+                "medical_info": symptoms_match.group(1).strip() if symptoms_match else user_message,
+            }
+
+            semantic_context = self._fallback_semantic_extraction(pii["medical_info"])
+            intent = "general"
+        else:
+            gatekeeper_output = self.process_message(user_message)
+            pii = gatekeeper_output.get("pii", {})
+            semantic_context = gatekeeper_output.get("semantic_context", {})
+            intent = gatekeeper_output.get("intent", "general")
+
+        if pii.get("patient_name"):
+            patient_uuid, _ = identity_vault.pseudonymize_patient(
+                patient_name=pii.get("patient_name"),
+                age=pii.get("age"),
+                gender=pii.get("gender"),
+                component="gatekeeper",
+            )
+        else:
+            patient_uuid = "temp-uuid-" + str(hash(user_message))[:8]
+
+        return {
+            "patient_uuid": patient_uuid,
+            "semantic_context": semantic_context,
+            "intent": intent,
+            "cloud_safe": True,
+        }
+
+    def reidentify_output(self, patient_uuid: str, cloud_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Compatibility helper to re-attach identity info for UI output."""
+        final = dict(cloud_result or {})
+
+        if patient_uuid and not patient_uuid.startswith("temp-uuid"):
+            identity = identity_vault.reidentify_patient(patient_uuid=patient_uuid, component="gatekeeper")
+            if identity:
+                final.setdefault("patient_uuid", patient_uuid)
+                final["patient_name"] = identity.get("patient_name")
+                final["patient_age"] = identity.get("age")
+                final["patient_gender"] = identity.get("gender")
+
+        return final
+
     def process_message(self, user_message: str) -> Dict[str, Any]:
         """
         Main processing pipeline for incoming user messages.

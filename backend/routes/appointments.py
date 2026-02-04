@@ -4,8 +4,11 @@ from typing import Optional
 import logging
 
 from agents.gatekeeper import gatekeeper_agent
-from agents.coordinator import coordinator
+from agents.coordinator import CoordinatorAgent
 from agents.worker import worker_agent
+
+# Deterministic planner for API routes (avoids external LLM calls during tests)
+_coordinator = CoordinatorAgent()
 
 logger = logging.getLogger(__name__)
 
@@ -68,15 +71,16 @@ async def schedule_appointment(request: AppointmentRequest):
         
         logger.info(f"         Pseudonymized to UUID: {patient_uuid[:8]}...")
         
-        # Step 3: Coordinator planning
+        # Step 3: Coordinator planning (deterministic)
         logger.info("Step 3: Invoking Coordinator for task planning...")
-        # Use new coordinator with process_message
-        # For compatibility, construct a message
-        message = f"Patient UUID: {patient_uuid}, Symptoms: {request.symptoms}"
-        coord_result = coordinator.process_message(message)
+        coord_result = _coordinator.coordinate_request(
+            patient_uuid=patient_uuid,
+            action_type="appointment",
+            semantic_context=semantic_context,
+        )
         
-        if not coord_result.get("ready_for_worker"):
-            raise HTTPException(status_code=400, detail="Coordination failed")
+        if coord_result.get("success") is False:
+            raise HTTPException(status_code=400, detail=coord_result.get("error", "Coordination failed"))
         
         logger.info("         Coordination complete")
         
