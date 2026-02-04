@@ -6,6 +6,7 @@ from agents.gatekeeper import gatekeeper_agent
 from agents.context_agent import context_agent
 from agents.execution_agent import execution_agent
 from agents.session_manager import session_manager
+from agents.hitl_manager import hitl_manager
 from database.identity_vault import identity_vault
 from vector_store.metadata_store import metadata_store
 
@@ -130,6 +131,110 @@ class AgentCoordinator:
             if not session:
                 session_id = session_manager.create_session()
                 session = session_manager.get_session(session_id)
+            
+            # Check if there's a pending action awaiting confirmation
+            pending_action = session_manager.get_pending_action(session_id)
+            
+            if pending_action and pending_action.get('awaiting_confirmation'):
+                # User is responding to confirmation request
+                is_confirmed = hitl_manager.parse_confirmation_response(user_message)
+                
+                if is_confirmed:
+                    # Execute the pending action
+                    logger.info("User confirmed action - executing...")
+                    
+                    action_type = pending_action['action_type']
+                    action_data = pending_action['action_data']
+                    patient_uuid = pending_action.get('patient_uuid')
+                    
+                    # Execute based on action type
+                    if action_type == 'appointment':
+                        result = self._finalize_appointment(patient_uuid, action_data)
+                    elif action_type == 'followup':
+                        result = self._finalize_followup(patient_uuid, action_data)
+                    else:
+                        result = {"message": "Action completed"}
+                    
+                    # Clear pending action
+                    session_manager.clear_pending_action(session_id)
+                    
+                    return {
+                        "success": True,
+                        "message": f"✓ {result.get('message', 'Action completed successfully!')}",
+                        "intent": f"{action_type}_confirmed",
+                        "patient_uuid": patient_uuid,
+                        "session_id": session_id,
+                        "result": result,
+                        "privacy_safe": True,
+                        "workflow_steps": ["User confirmation received", "Action executed"]
+                    }
+                else:
+                    # User declined
+                    session_manager.clear_pending_action(session_id)
+                    
+                    return {
+                        "success": True,
+                        "message": "Action cancelled. How else can I help you?",
+                        "intent": "cancelled",
+                        "session_id": session_id,
+                        "privacy_safe": True,
+                        "workflow_steps": ["User cancelled action"]
+                    }
+            
+            # Check if we're collecting responses to medical questions
+            if pending_action and not pending_action.get('awaiting_confirmation'):
+                # We're in question-gathering phase
+                questions = pending_action.get('questions_asked', [])
+                responses = pending_action.get('user_responses', [])
+                
+                # Record this response
+                if len(responses) < len(questions):
+                    current_question = questions[len(responses)]
+                    session_manager.add_question_response(
+                        session_id=session_id,
+                        question=current_question,
+                        response=user_message
+                    )
+                    # Refresh pending action to get updated responses
+                    pending_action = session_manager.get_pending_action(session_id)
+                    responses = pending_action.get('user_responses', [])
+                
+                # Check if all questions answered
+                if len(responses) >= len(questions):
+                    # Move to confirmation phase
+                    pending_action['awaiting_confirmation'] = True
+                    
+                    # Get patient info for summary
+                    active_patient = session_manager.get_active_patient(session_id)
+                    patient_name = active_patient.get('patient_name', 'Unknown') if active_patient else 'Unknown'
+                    
+                    # Create confirmation summary
+                    summary = hitl_manager.create_confirmation_summary(
+                        intent=pending_action['action_type'],
+                        patient_name=patient_name,
+                        action_data=pending_action['action_data'],
+                        user_responses=responses
+                    )
+                    
+                    return {
+                        "success": True,
+                        "message": summary,
+                        "intent": "awaiting_confirmation",
+                        "session_id": session_id,
+                        "privacy_safe": True,
+                        "workflow_steps": ["All questions answered", "Awaiting user confirmation"]
+                    }
+                else:
+                    # Ask next question
+                    next_question = questions[len(responses)]
+                    return {
+                        "success": True,
+                        "message": next_question,
+                        "intent": "collecting_info",
+                        "session_id": session_id,
+                        "privacy_safe": True,
+                        "workflow_steps": [f"Collecting response {len(responses)+1}/{len(questions)}"]
+                    }
             
             # Check if there's a pending disambiguation
             pending_disambiguation = session_manager.get_pending_disambiguation(session_id)
@@ -298,6 +403,43 @@ class AgentCoordinator:
                 refined_context=refined_context
             )
             
+            # Check if HITL is needed for appointments/followups
+            if intent in ['appointment', 'followup']:
+                # Generate medical questions
+                questions = hitl_manager.generate_medical_questions(
+                    intent=intent,
+                    semantic_context=semantic_context
+                )
+                
+                # Store pending action
+                session_manager.set_pending_action(
+                    session_id=session_id,
+                    action_type=intent,
+                    action_data=execution_result,
+                    questions_asked=questions
+                )
+                
+                # Update pending action with patient UUID
+                pending = session_manager.get_pending_action(session_id)
+                if pending:
+                    pending['patient_uuid'] = patient_uuid
+                
+                # Return first question
+                return {
+                    "success": True,
+                    "message": f"I'll help you with that. First, I need to ask a few questions:\n\n{questions[0]}",
+                    "intent": f"{intent}_initiated",
+                    "session_id": session_id,
+                    "patient_uuid": patient_uuid,
+                    "privacy_safe": True,
+                    "workflow_steps": [
+                        "Intent identified",
+                        "HITL workflow initiated",
+                        "Collecting medical information"
+                    ]
+                }
+            
+            # For non-HITL intents (summary, etc.), proceed normally
             # Step 6: Re-identify patient for output (if not temp UUID)
             if not patient_uuid.startswith("temp-uuid"):
                 logger.info("Step 6: Gatekeeper re-identifying patient...")
@@ -348,6 +490,38 @@ class AgentCoordinator:
                 "intent": "error",
                 "privacy_safe": True
             }
+    
+    def _finalize_appointment(self, patient_uuid: str, action_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Finalize appointment booking after confirmation."""
+        # Store in database
+        record_id = identity_vault.store_medical_record(
+            patient_uuid=patient_uuid,
+            record_type='appointment',
+            symptoms=action_data.get('symptoms', 'N/A'),
+            notes=f"Appointment scheduled with {action_data.get('recommended_doctor', 'TBD')}",
+            component="coordinator"
+        )
+        
+        return {
+            "message": f"Appointment booked successfully! Reference: {record_id[:8]}",
+            "record_id": record_id,
+            **action_data
+        }
+
+    def _finalize_followup(self, patient_uuid: str, action_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Finalize follow-up scheduling after confirmation."""
+        record_id = identity_vault.store_medical_record(
+            patient_uuid=patient_uuid,
+            record_type='followup',
+            notes=f"Follow-up scheduled for {action_data.get('followup_date', 'TBD')}",
+            component="coordinator"
+        )
+        
+        return {
+            "message": f"Follow-up scheduled successfully! Reference: {record_id[:8]}",
+            "record_id": record_id,
+            **action_data
+        }
 
 
 # Global instance

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import uuid
 import logging
 from datetime import datetime, timedelta
@@ -139,6 +139,61 @@ class SessionManager:
         """Clear all sessions (for testing)."""
         self.sessions.clear()
         logger.info("Cleared all sessions")
+    
+    def set_pending_action(
+        self,
+        session_id: str,
+        action_type: str,
+        action_data: Dict[str, Any],
+        questions_asked: Optional[List[Dict[str, Any]]] = None
+    ):
+        """Set a pending action that requires confirmation."""
+        session = self.get_session(session_id)
+        if session:
+            session["pending_action"] = {
+                "action_type": action_type,
+                "action_data": action_data,
+                "questions_asked": questions_asked or [],
+                "user_responses": [],
+                "awaiting_confirmation": False,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            session["last_activity"] = datetime.utcnow()
+            logger.info(f"Session {session_id}: Pending action set - {action_type}")
+
+    def get_pending_action(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get pending action awaiting confirmation."""
+        session = self.get_session(session_id)
+        if session:
+            return session.get("pending_action")
+        return None
+
+    def clear_pending_action(self, session_id: str):
+        """Clear pending action."""
+        session = self.get_session(session_id)
+        if session:
+            session["pending_action"] = None
+            logger.info(f"Session {session_id}: Pending action cleared")
+
+    def add_question_response(
+        self,
+        session_id: str,
+        question: str,
+        response: str
+    ):
+        """Record user's response to a medical question."""
+        session = self.get_session(session_id)
+        if session and session.get("pending_action"):
+            pending = session["pending_action"]
+            if "user_responses" not in pending:
+                pending["user_responses"] = []
+            
+            pending["user_responses"].append({
+                "question": question,
+                "response": response,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            session["last_activity"] = datetime.utcnow()
 
 
 # Global instance
