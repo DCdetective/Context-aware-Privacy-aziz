@@ -420,6 +420,211 @@ class IdentityVault:
         finally:
             session.close()
     
+    def find_patients_by_name(
+        self,
+        patient_name: str,
+        component: str = "system"
+    ) -> List[Dict[str, Any]]:
+        """
+        Find all patients matching a given name.
+        
+        Args:
+            patient_name: Patient name to search for
+            component: Component requesting the search
+            
+        Returns:
+            List of matching patient records
+        """
+        session = self._get_session()
+        
+        try:
+            patients = session.query(PatientIdentity).filter(
+                PatientIdentity.patient_name.ilike(f"%{patient_name}%")
+            ).all()
+            
+            # Log search
+            if patients:
+                self._log_audit(
+                    session=session,
+                    patient_uuid="search",
+                    operation="search_by_name",
+                    component=component,
+                    pii_accessed=True,
+                    details=f"Found {len(patients)} patients matching '{patient_name}'"
+                )
+                session.commit()
+            
+            result = [
+                {
+                    'patient_uuid': p.patient_uuid,
+                    'patient_name': p.patient_name,
+                    'age': p.age,
+                    'gender': p.gender,
+                    'created_at': p.created_at.isoformat() if p.created_at else None,
+                    'last_accessed': p.last_accessed.isoformat() if p.last_accessed else None,
+                    'access_count': p.access_count
+                }
+                for p in patients
+            ]
+            
+            logger.info(f"Found {len(result)} patients matching '{patient_name}'")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error searching patients by name: {str(e)}")
+            raise
+        finally:
+            session.close()
+
+    def resolve_patient_identity(
+        self,
+        patient_name: str,
+        age: Optional[int] = None,
+        gender: Optional[str] = None,
+        component: str = "system"
+    ) -> Dict[str, Any]:
+        """
+        Resolve patient identity with collision detection.
+        
+        Returns a resolution result that indicates:
+        - If patient is unique (auto-resolve)
+        - If multiple matches found (needs user disambiguation)
+        - If no match found (needs user confirmation to create new)
+        
+        Args:
+            patient_name: Patient name
+            age: Optional age for disambiguation
+            gender: Optional gender for disambiguation
+            component: Component requesting resolution
+            
+        Returns:
+            Resolution result dictionary
+        """
+        session = self._get_session()
+        
+        try:
+            # Find all matching patients
+            matching_patients = session.query(PatientIdentity).filter(
+                PatientIdentity.patient_name == patient_name
+            ).all()
+            
+            if len(matching_patients) == 0:
+                # No match - needs confirmation to create
+                return {
+                    "status": "needs_confirmation",
+                    "message": f"No patient found with name '{patient_name}'. Create new patient?",
+                    "patient_name": patient_name,
+                    "age": age,
+                    "gender": gender,
+                    "action_required": "confirm_new_patient"
+                }
+            
+            elif len(matching_patients) == 1:
+                # Exact match - auto-resolve
+                patient = matching_patients[0]
+                
+                # Update access tracking
+                patient.last_accessed = datetime.utcnow()
+                patient.access_count += 1
+                
+                # Update age/gender if provided
+                if age is not None and patient.age != age:
+                    patient.age = age
+                if gender is not None and patient.gender != gender:
+                    patient.gender = gender
+                
+                session.commit()
+                
+                # Log resolution
+                self._log_audit(
+                    session=session,
+                    patient_uuid=patient.patient_uuid,
+                    operation="resolve_identity_unique",
+                    component=component,
+                    pii_accessed=True,
+                    details=f"Auto-resolved to UUID: {patient.patient_uuid}"
+                )
+                session.commit()
+                
+                return {
+                    "status": "resolved",
+                    "patient_uuid": patient.patient_uuid,
+                    "patient_name": patient.patient_name,
+                    "age": patient.age,
+                    "gender": patient.gender,
+                    "message": f"Resolved to existing patient {patient.patient_uuid}"
+                }
+            
+            else:
+                # Multiple matches - needs disambiguation
+                candidates = [
+                    {
+                        "patient_uuid": p.patient_uuid,
+                        "patient_name": p.patient_name,
+                        "age": p.age,
+                        "gender": p.gender,
+                        "last_accessed": p.last_accessed.isoformat() if p.last_accessed else None,
+                        "access_count": p.access_count
+                    }
+                    for p in matching_patients
+                ]
+                
+                # Log ambiguity
+                self._log_audit(
+                    session=session,
+                    patient_uuid="ambiguous",
+                    operation="resolve_identity_ambiguous",
+                    component=component,
+                    pii_accessed=True,
+                    details=f"Found {len(matching_patients)} patients named '{patient_name}'"
+                )
+                session.commit()
+                
+                return {
+                    "status": "needs_disambiguation",
+                    "message": f"Found {len(matching_patients)} patients named '{patient_name}'. Please select:",
+                    "candidates": candidates,
+                    "action_required": "select_patient_uuid"
+                }
+        
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error resolving patient identity: {str(e)}")
+            raise
+        finally:
+            session.close()
+
+    def confirm_new_patient(
+        self,
+        patient_name: str,
+        age: Optional[int] = None,
+        gender: Optional[str] = None,
+        component: str = "system"
+    ) -> str:
+        """
+        Create a new patient after explicit user confirmation.
+        
+        Args:
+            patient_name: Patient name
+            age: Patient age
+            gender: Patient gender
+            component: Component creating the patient
+            
+        Returns:
+            New patient UUID
+        """
+        patient_uuid, is_new = self.pseudonymize_patient(
+            patient_name=patient_name,
+            age=age,
+            gender=gender,
+            component=component
+        )
+        
+        if not is_new:
+            logger.warning(f"Patient already existed: {patient_uuid}")
+        
+        return patient_uuid
+
     def verify_privacy_compliance(self) -> Dict[str, Any]:
         """
         Verify privacy compliance - ensure no PII exposed to cloud.

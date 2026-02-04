@@ -1,9 +1,11 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
+import re
 
 from agents.gatekeeper import gatekeeper_agent
 from agents.context_agent import context_agent
 from agents.execution_agent import execution_agent
+from agents.session_manager import session_manager
 from database.identity_vault import identity_vault
 from vector_store.metadata_store import metadata_store
 
@@ -87,12 +89,30 @@ class AgentCoordinator:
         """Initialize coordinator."""
         logger.info("Agent Coordinator initialized")
     
-    def process_message(self, user_message: str) -> Dict[str, Any]:
+    def _extract_uuid_from_message(self, message: str) -> Optional[str]:
+        """Extract UUID from user message."""
+        # Look for UUID pattern
+        uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+        match = re.search(uuid_pattern, message, re.IGNORECASE)
+        if match:
+            return match.group(0)
+        
+        # Also check for partial UUID (first 8 chars)
+        partial_pattern = r'[0-9a-f]{8}'
+        match = re.search(partial_pattern, message, re.IGNORECASE)
+        if match:
+            # This is a partial match - would need to validate against candidates
+            return match.group(0)
+        
+        return None
+    
+    def process_message(self, user_message: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Process user message through multi-agent pipeline.
         
         Args:
             user_message: Raw user input
+            session_id: Optional session ID for context
             
         Returns:
             Final response with re-identified PII
@@ -102,6 +122,73 @@ class AgentCoordinator:
         logger.info("=" * 70)
         
         try:
+            # Create or get session
+            if not session_id:
+                session_id = session_manager.create_session()
+            
+            session = session_manager.get_session(session_id)
+            if not session:
+                session_id = session_manager.create_session()
+                session = session_manager.get_session(session_id)
+            
+            # Check if there's a pending disambiguation
+            pending_disambiguation = session_manager.get_pending_disambiguation(session_id)
+            
+            if pending_disambiguation:
+                # User is responding to disambiguation request
+                # Extract UUID selection from message
+                selected_uuid = self._extract_uuid_from_message(user_message)
+                
+                if selected_uuid:
+                    # Validate selection
+                    candidates = pending_disambiguation.get("candidates", [])
+                    valid_uuids = [c["patient_uuid"] for c in candidates]
+                    
+                    # Check for partial match
+                    matching_uuid = None
+                    for uuid in valid_uuids:
+                        if uuid.startswith(selected_uuid) or uuid == selected_uuid:
+                            matching_uuid = uuid
+                            break
+                    
+                    if matching_uuid:
+                        # Set active patient
+                        patient_name = next(
+                            c["patient_name"] for c in candidates 
+                            if c["patient_uuid"] == matching_uuid
+                        )
+                        session_manager.set_active_patient(session_id, matching_uuid, patient_name)
+                        session_manager.clear_pending_disambiguation(session_id)
+                        
+                        return {
+                            "success": True,
+                            "message": f"Selected patient {patient_name} (UUID: {matching_uuid[:8]}...). How can I help?",
+                            "intent": "patient_selected",
+                            "patient_uuid": matching_uuid,
+                            "patient_name": patient_name,
+                            "session_id": session_id,
+                            "result": {},
+                            "privacy_safe": True,
+                            "workflow_steps": ["Patient identity resolved"]
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "message": "Invalid selection. Please select a valid patient UUID from the list.",
+                            "intent": "error",
+                            "session_id": session_id,
+                            "privacy_safe": True
+                        }
+                else:
+                    return {
+                        "success": False,
+                        "message": "Please select a patient by providing their UUID.",
+                        "intent": "disambiguation_pending",
+                        "session_id": session_id,
+                        "disambiguation_data": pending_disambiguation,
+                        "privacy_safe": True
+                    }
+            
             # Step 1: Gatekeeper processes input
             logger.info("Step 1: Gatekeeper processing...")
             gatekeeper_output = gatekeeper_agent.process_message(user_message)
@@ -110,20 +197,80 @@ class AgentCoordinator:
             intent = gatekeeper_output['intent']
             semantic_context = gatekeeper_output['semantic_context']
             
-            # Step 2: Pseudonymize patient (if PII exists)
+            # Step 2: Resolve patient identity (with collision detection)
             if pii_data.get('patient_name'):
-                logger.info("Step 2: Pseudonymizing patient...")
-                patient_uuid, is_new = identity_vault.pseudonymize_patient(
+                logger.info("Step 2: Resolving patient identity...")
+                
+                resolution = identity_vault.resolve_patient_identity(
                     patient_name=pii_data['patient_name'],
                     age=pii_data.get('age'),
                     gender=pii_data.get('gender'),
                     component="coordinator"
                 )
-                logger.info(f"Patient UUID: {patient_uuid} (new: {is_new})")
+                
+                if resolution["status"] == "needs_disambiguation":
+                    # Multiple patients found - ask user to choose
+                    session_manager.set_pending_disambiguation(session_id, resolution)
+                    
+                    # Format candidate list for user
+                    candidates_text = "\n".join([
+                        f"- {c['patient_name']} (UUID: {c['patient_uuid'][:8]}..., "
+                        f"Age: {c.get('age', 'N/A')}, Gender: {c.get('gender', 'N/A')}, "
+                        f"Last seen: {c.get('last_accessed', 'Never')})"
+                        for c in resolution["candidates"]
+                    ])
+                    
+                    return {
+                        "success": True,
+                        "message": f"{resolution['message']}\n\n{candidates_text}\n\nPlease reply with the patient UUID.",
+                        "intent": "disambiguation_required",
+                        "session_id": session_id,
+                        "disambiguation_data": resolution,
+                        "privacy_safe": True,
+                        "workflow_steps": ["Multiple patients found", "Requesting user disambiguation"]
+                    }
+                
+                elif resolution["status"] == "needs_confirmation":
+                    # New patient - ask for confirmation
+                    return {
+                        "success": True,
+                        "message": resolution["message"] + " Please confirm (yes/no).",
+                        "intent": "confirmation_required",
+                        "session_id": session_id,
+                        "pending_confirmation": {
+                            "action": "create_patient",
+                            "patient_name": resolution["patient_name"],
+                            "age": resolution.get("age"),
+                            "gender": resolution.get("gender")
+                        },
+                        "privacy_safe": True,
+                        "workflow_steps": ["New patient detected", "Requesting user confirmation"]
+                    }
+                
+                elif resolution["status"] == "resolved":
+                    # Unique patient found
+                    patient_uuid = resolution["patient_uuid"]
+                    session_manager.set_active_patient(
+                        session_id,
+                        patient_uuid,
+                        resolution["patient_name"]
+                    )
+                    logger.info(f"Patient resolved: {patient_uuid}")
+                
+                else:
+                    logger.error(f"Unknown resolution status: {resolution['status']}")
+                    patient_uuid = "temp-uuid-" + str(hash(user_message))[:8]
+            
             else:
-                # No PII - generate temp UUID for general queries
-                patient_uuid = "temp-uuid-" + str(hash(user_message))[:8]
-                logger.info("No PII detected, using temporary UUID")
+                # No PII detected - check if there's an active patient in session
+                active_patient = session_manager.get_active_patient(session_id)
+                if active_patient:
+                    patient_uuid = active_patient["patient_uuid"]
+                    logger.info(f"Using active patient from session: {patient_uuid}")
+                else:
+                    # No patient context
+                    patient_uuid = "temp-uuid-" + str(hash(user_message))[:8]
+                    logger.info("No PII detected, using temporary UUID")
             
             # Step 3: Store metadata in vector store
             if metadata_store and pii_data.get('patient_name'):
@@ -171,10 +318,12 @@ class AgentCoordinator:
                 "intent": intent,
                 "patient_uuid": patient_uuid,
                 "patient_name": execution_result.get('patient_name', 'N/A'),
+                "session_id": session_id,
                 "result": execution_result,
                 "privacy_safe": True,
                 "workflow_steps": [
                     "Gatekeeper: PII detection and pseudonymization",
+                    "Identity Resolution: Patient disambiguation",
                     "Metadata Store: UUID-linked context storage",
                     "Context Agent: RAG-based context refinement",
                     "Execution Agent: Task execution",
