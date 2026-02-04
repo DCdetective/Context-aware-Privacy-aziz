@@ -63,11 +63,6 @@ async function handleSendMessage() {
         if (data.success) {
             // Add bot response
             addBotMessage(data);
-            
-            // Update privacy visualization
-            if (window.updatePrivacyVisualization) {
-                window.updatePrivacyVisualization(data.workflow_steps);
-            }
         } else {
             addBotMessage({
                 message: data.message || 'Sorry, I encountered an error.',
@@ -95,14 +90,16 @@ function addUserMessage(text) {
     const timestamp = new Date().toLocaleTimeString();
     
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'message user-message';
+    messageDiv.className = 'chat-row chat-row--user';
     messageDiv.innerHTML = `
-        <div class="message-avatar">👤</div>
-        <div class="message-content">
-            <div class="message-text">
-                <p>${escapeHtml(text)}</p>
+        <div class="chat-row-inner">
+            <div class="avatar" aria-hidden="true">👤</div>
+            <div class="chat-content">
+                <div class="chat-text">
+                    <p>${escapeHtml(text)}</p>
+                </div>
+                <div class="message-meta">${timestamp}</div>
             </div>
-            <div class="message-meta">${timestamp}</div>
         </div>
     `;
     
@@ -122,14 +119,15 @@ function addBotMessage(data) {
     const timestamp = new Date().toLocaleTimeString();
     
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'message bot-message';
-    
+    messageDiv.className = 'chat-row chat-row--assistant';
+
     let content = `
-        <div class="message-avatar">🤖</div>
-        <div class="message-content">
-            <div class="message-text">
-                <p>${escapeHtml(data.message)}</p>
-            </div>
+        <div class="chat-row-inner">
+            <div class="avatar" aria-hidden="true">🤖</div>
+            <div class="chat-content">
+                <div class="chat-text">
+                    <p>${escapeHtml(data.message)}</p>
+                </div>
     `;
     
     // Add result card based on intent
@@ -138,7 +136,8 @@ function addBotMessage(data) {
     }
     
     content += `
-            <div class="message-meta">${timestamp}</div>
+                <div class="message-meta">${timestamp}</div>
+            </div>
         </div>
     `;
     
@@ -152,6 +151,12 @@ function addBotMessage(data) {
         data: data,
         timestamp: timestamp
     });
+    
+    // Update privacy visualization with details
+    if (window.updatePrivacyVisualization && data.workflow_steps) {
+        const privacyDetails = data.result?.privacy_details || null;
+        window.updatePrivacyVisualization(data.workflow_steps, privacyDetails);
+    }
 }
 
 function formatResultCard(intent, result) {
@@ -233,7 +238,7 @@ function formatResultCard(intent, result) {
 
 function showTypingIndicator() {
     const indicator = document.getElementById('typingIndicator');
-    indicator.style.display = 'flex';
+    indicator.style.display = 'block';
     scrollToBottom();
 }
 

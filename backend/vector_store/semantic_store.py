@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Any
 import logging
 import hashlib
 import json
+import time
 from datetime import datetime
 
 try:
@@ -29,24 +30,13 @@ class SemanticAnchorStore:
         try:
             self.pc = Pinecone(api_key=settings.pinecone_api_key)
             self.index_name = settings.pinecone_index_metadata
+            self.dimension = 1024  # Default dimension for semantic anchors
             
-            # Connect to index first to get actual dimension
+            # Create index if it doesn't exist
+            self._create_index_if_needed()
+            
+            # Connect to index
             self.index = self.pc.Index(self.index_name)
-            
-            # Get index info to determine dimension
-            try:
-                stats = self.index.describe_index_stats()
-                # Try to get dimension from existing index
-                existing_indexes = self.pc.list_indexes()
-                for idx in existing_indexes:
-                    if idx.name == self.index_name:
-                        self.dimension = idx.dimension
-                        logger.info(f"Using existing index dimension: {self.dimension}")
-                        break
-                else:
-                    self.dimension = 1024  # Default dimension
-            except:
-                self.dimension = 1024  # Default to 1024 if we can't determine
             
             logger.info(f"Semantic Anchor Store initialized with index: {self.index_name}")
             logger.info(f"Vector dimension: {self.dimension}")
@@ -54,6 +44,29 @@ class SemanticAnchorStore:
         except Exception as e:
             logger.error(f"Failed to initialize Pinecone: {str(e)}")
             raise
+    
+    def _create_index_if_needed(self):
+        """Create Pinecone index if it doesn't exist."""
+        existing_indexes = [idx.name for idx in self.pc.list_indexes()]
+        
+        if self.index_name not in existing_indexes:
+            logger.info(f"Creating Pinecone index: {self.index_name}")
+            
+            self.pc.create_index(
+                name=self.index_name,
+                dimension=self.dimension,
+                metric="cosine",
+                spec=ServerlessSpec(
+                    cloud="aws",
+                    region=settings.pinecone_environment
+                )
+            )
+            
+            # Wait for index to be ready
+            while not self.pc.describe_index(self.index_name).status['ready']:
+                time.sleep(1)
+            
+            logger.info(f"Index {self.index_name} created successfully")
     
     
     def _generate_vector(self, text: str) -> List[float]:

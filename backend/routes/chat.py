@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 import logging
 
 from agents.coordinator import coordinator
+from database.identity_vault import identity_vault
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,7 @@ class ChatResponse(BaseModel):
 
 @router.post("/message", response_model=ChatResponse)
 async def send_message(chat_message: ChatMessage):
-    """
-    Process a chat message through the multi-agent system.
-    
-    Workflow:
-    1. User sends message
-    2. Coordinator processes through agents
-    3. Return response with results
-    """
+    """Process chat message with detailed privacy tracking."""
     try:
         logger.info("=" * 70)
         logger.info(f"CHAT API: Received message")
@@ -49,6 +43,19 @@ async def send_message(chat_message: ChatMessage):
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message", "Processing failed"))
         
+        # Add privacy details for visualization
+        privacy_details = {
+            "pii_detected": result.get("result", {}).get("patient_name") is not None,
+            "original_contains": {
+                "name": result.get("result", {}).get("patient_name", "N/A"),
+                "age": result.get("result", {}).get("patient_age", "N/A"),
+                "gender": result.get("result", {}).get("patient_gender", "N/A")
+            },
+            "pseudonymized_to": result.get("patient_uuid"),
+            "cloud_safe": result.get("privacy_safe"),
+            "workflow_steps": result.get("workflow_steps", [])
+        }
+        
         # Format response
         response = ChatResponse(
             success=result["success"],
@@ -56,7 +63,10 @@ async def send_message(chat_message: ChatMessage):
             intent=result["intent"],
             patient_uuid=result.get("patient_uuid"),
             patient_name=result.get("patient_name"),
-            result=result.get("result", {}),
+            result={
+                **result.get("result", {}),
+                "privacy_details": privacy_details
+            },
             privacy_safe=result["privacy_safe"],
             workflow_steps=result.get("workflow_steps", [])
         )
@@ -71,3 +81,26 @@ async def send_message(chat_message: ChatMessage):
     except Exception as e:
         logger.error(f"Error in chat API: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@router.get("/privacy-report")
+async def get_privacy_report():
+    """
+    Get privacy compliance report.
+    
+    Returns:
+        Privacy compliance statistics
+    """
+    try:
+        # Get compliance report from identity vault
+        report = identity_vault.verify_privacy_compliance()
+        
+        return {
+            "success": True,
+            "report": report,
+            "message": "Privacy compliance verified" if report["privacy_compliant"] else "Privacy violations detected"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating privacy report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
