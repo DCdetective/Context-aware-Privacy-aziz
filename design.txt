@@ -1,0 +1,164 @@
+GENT PROMPT — MEDSHIELD CHAT UI (STRICT DESIGN REQUIREMENTS)
+
+You are rebuilding the frontend UI of an existing FastAPI-based medical agentic chatbot called MedShield.
+
+Your task is to redesign the entire chatbot interface to closely match the modern, premium ChatGPT UI aesthetic (dark theme, minimal, smooth, professional).
+The current UI is NOT acceptable and must be fully replaced.
+
+CORE DESIGN GOAL
+
+The UI must visually resemble ChatGPT’s dark-mode interface:
+
+Black / dark gray background
+
+Clean typography
+
+Rounded components
+
+Minimal distractions
+
+Smooth spacing and hierarchy
+
+Premium, modern feel (NOT playful, NOT colorful gradients)
+
+This is a healthcare-grade interface, not a demo or student UI.
+
+STRICT DESIGN RULES (DO NOT IGNORE)
+
+Color Theme
+
+Background: near-black / charcoal (#0f0f0f – #1a1a1a)
+
+Chat bubbles:
+
+User: subtle dark gray
+
+Assistant: slightly lighter gray
+
+Accent color: muted green or teal (ONLY for send button / active states)
+
+No purple, no blue gradients, no bright colors
+
+Typography
+
+Use a modern sans-serif font (Inter / system-ui)
+
+Large readable text
+
+Clear visual hierarchy
+
+No emojis in main chat responses
+
+Layout
+
+Full-screen chat layout
+
+Centered chat column (max-width similar to ChatGPT)
+
+Optional left sidebar for:
+
+Chat history
+
+“New Chat” button
+
+Sticky input bar at bottom
+
+Chat Input
+
+Rounded input field
+
+Subtle border
+
+Send button with icon (paper plane / arrow)
+
+No oversized buttons
+
+Input should feel smooth and responsive
+
+Message Bubbles
+
+Rounded rectangles
+
+Soft shadows or none
+
+Timestamps small and subtle
+
+Messages aligned like ChatGPT:
+
+User → right
+
+Assistant → left
+
+System Transparency Panel
+
+When privacy masking happens, show a collapsible side panel or inline badge:
+
+Example:
+
+“Aziz → Patient_123”
+
+“Age 21 → Young adult”
+
+This panel must be subtle and optional (NOT dominating the UI)
+
+FUNCTIONAL UI REQUIREMENTS
+
+Single-page agentic medical chatbot
+
+No separate pages for appointment / follow-up / summary
+
+Everything happens conversationally
+
+The UI must support:
+
+Streaming responses
+
+Cards inside chat (appointment confirmation, summaries)
+
+Human-in-the-loop questions (buttons or inline prompts)
+
+WHAT NOT TO DO
+
+❌ No colorful gradients
+
+❌ No purple/blue background
+
+❌ No large emoji icons
+
+❌ No boxed dashboard-style layout
+
+❌ No “card-heavy” UI everywhere
+
+❌ No beginner Bootstrap look
+
+If the UI does NOT look premium and ChatGPT-like, it is considered FAILED.
+
+TECH STACK CONSTRAINTS
+
+HTML
+
+CSS (or Tailwind if needed)
+
+Vanilla JavaScript
+
+FastAPI backend
+
+No React unless explicitly required
+
+Clean separation of static assets
+
+FINAL EXPECTATION
+
+Deliver a dark-mode, ChatGPT-style medical assistant interface that:
+
+Looks professional
+
+Feels smooth
+
+Matches modern AI product standards
+
+Is suitable for a final-year engineering project
+
+Do not explain decisions.
+Do not justify choices.
+Just implement the UI exactly as specified.

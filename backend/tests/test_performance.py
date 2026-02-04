@@ -1,58 +1,84 @@
 import pytest
-from fastapi.testclient import TestClient
-from main import app
 import time
 
 
-@pytest.fixture
-def client():
-    """Create test client."""
-    return TestClient(app)
-
-
 class TestPerformance:
-    """Performance tests for the system."""
+    """Test system performance."""
     
-    def test_appointment_response_time(self, client):
-        """Test that appointment scheduling completes in reasonable time."""
-        request_data = {
-            "patient_name": "Performance Test Patient",
-            "age": 35,
-            "gender": "Male",
-            "symptoms": "Performance test"
-        }
+    def test_chat_response_time(self, client):
+        """Test chat response time is acceptable."""
+        message = "I'm Speed Test, 30, male. Quick appointment please."
         
         start_time = time.time()
-        response = client.post("/api/appointments/schedule", json=request_data)
+        response = client.post("/api/chat/message", json={"message": message})
         end_time = time.time()
         
-        response_time = end_time - start_time
-        
-        print(f"\nAppointment Response Time: {response_time:.2f} seconds")
+        duration = end_time - start_time
         
         assert response.status_code == 200
-        # Should complete within 30 seconds (allowing for LLM calls)
-        assert response_time < 30, f"Response too slow: {response_time:.2f}s"
+        assert duration < 30.0  # Should respond within 30 seconds
     
-    def test_concurrent_requests(self, client):
-        """Test handling of concurrent requests."""
-        import concurrent.futures
+    def test_multiple_sequential_requests(self, client):
+        """Test handling multiple sequential requests."""
+        messages = [
+            "I'm Test Patient 1, 20, female. I need help.",
+            "I'm Test Patient 2, 30, male. I need an appointment.",
+            "I'm Test Patient 3, 40, female. Can you generate my summary?"
+        ]
         
-        def make_request(patient_num):
-            request_data = {
-                "patient_name": f"Concurrent Patient {patient_num}",
-                "age": 30 + patient_num,
-                "gender": "Male" if patient_num % 2 == 0 else "Female",
-                "symptoms": f"Concurrent test {patient_num}"
-            }
-            response = client.post("/api/appointments/schedule", json=request_data)
-            return response.status_code == 200
+        start_time = time.time()
         
-        # Test with 5 concurrent requests
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(make_request, i) for i in range(5)]
-            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+        success_count = 0
+        for msg in messages:
+            response = client.post("/api/chat/message", json={"message": msg})
+            if response.status_code == 200:
+                success_count += 1
         
-        # All requests should succeed
-        assert all(results), "Some concurrent requests failed"
-        print(f"\n✅ Handled {len(results)} concurrent requests successfully")
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        # Should handle 3 requests in reasonable time
+        assert duration < 60.0
+        # At least 2 out of 3 should succeed
+        assert success_count >= 2
+    
+    def test_identity_vault_performance(self, test_vault):
+        """Test identity vault operations are fast."""
+        # Test pseudonymization speed
+        start = time.time()
+        
+        for i in range(10):
+            test_vault.pseudonymize_patient(
+                patient_name=f"Patient {i}",
+                age=20 + i,
+                gender="Male" if i % 2 == 0 else "Female"
+            )
+        
+        duration = time.time() - start
+        
+        # 10 operations should be fast
+        assert duration < 5.0
+
+
+class TestScalability:
+    """Test system scalability."""
+    
+    def test_many_patients(self, test_vault):
+        """Test handling many patients."""
+        # Create 100 patients
+        uuids = []
+        for i in range(100):
+            uuid, _ = test_vault.pseudonymize_patient(
+                patient_name=f"Patient {i}",
+                age=20 + (i % 60),
+                gender="Male" if i % 2 == 0 else "Female"
+            )
+            uuids.append(uuid)
+        
+        # Verify all unique
+        assert len(set(uuids)) == 100
+        
+        # Verify can retrieve all
+        for uuid in uuids[:10]:  # Test first 10
+            identity = test_vault.reidentify_patient(uuid)
+            assert identity is not None

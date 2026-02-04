@@ -1,58 +1,50 @@
-# MedShield Test Suite
-
-## Test Organization
-
-### Unit Tests
-- `test_identity_vault.py` - Local identity vault operations
-- `test_semantic_store.py` - Semantic anchor store operations
-- `test_gatekeeper.py` - Gatekeeper agent functionality
-- `test_coordinator.py` - Coordinator agent functionality
-- `test_worker.py` - Worker agent functionality
-
-### Integration Tests
-- `test_api_routes.py` - API endpoint integration
-- `test_e2e_workflow.py` - End-to-end workflow tests
-
-### Compliance Tests
-- `test_privacy_compliance.py` - Privacy compliance verification
-
-### Performance Tests
-- `test_performance.py` - Response time and concurrency tests
+# MedShield v2 Test Suite
 
 ## Running Tests
 
-### Run All Tests
+### Run all tests:
 ```bash
-cd backend
 python run_tests.py
 ```
 
-### Run Specific Test Suite
+### Run specific test file:
 ```bash
-pytest tests/test_identity_vault.py -v
+pytest tests/test_e2e_workflow.py -v
 ```
 
-### Run with Coverage
+### Run specific test:
+```bash
+pytest tests/test_e2e_workflow.py::TestE2EWorkflow::test_complete_appointment_workflow -v
+```
+
+### Run with coverage:
 ```bash
 pytest tests/ --cov=. --cov-report=html
 ```
 
-### Run Privacy Compliance Tests Only
-```bash
-pytest tests/test_privacy_compliance.py -v
-```
+## Test Structure
 
-## Test Requirements
+- `test_gatekeeper.py` - Gatekeeper agent tests
+- `test_agents.py` - Cloud agent tests
+- `test_identity_vault.py` - Identity vault tests
+- `test_vector_stores.py` - Vector store tests
+- `test_synthetic_data.py` - Synthetic data tests
+- `test_e2e_workflow.py` - End-to-end workflow tests
+- `test_privacy_compliance.py` - Privacy compliance tests
+- `test_performance.py` - Performance tests
 
-- All tests must pass before deployment
-- Privacy compliance tests are CRITICAL
-- E2E tests validate complete workflows
-- Performance tests ensure acceptable response times
+## Test Coverage Goals
 
-## Privacy Test Verification
+- Unit tests: 80%+ coverage
+- Integration tests: All major workflows
+- E2E tests: All user journeys
+- Privacy tests: 100% of privacy-critical paths
 
-The following MUST always be true:
-1. NO PII in semantic store
-2. NO cloud-exposed operations in audit trail
-3. UUID-only communication with cloud agents
-4. Complete audit trail for all operations
+## Privacy Testing
+
+Critical privacy tests ensure:
+1. No PII in cloud storage
+2. UUID-only in cloud agents
+3. Audit trails complete
+4. Re-identification only at output
+5. Data separation maintained
