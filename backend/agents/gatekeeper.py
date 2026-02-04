@@ -3,6 +3,7 @@ import json
 import re
 from typing import Dict, Any, Optional, Tuple
 import logging
+from datetime import datetime, timezone
 
 from utils.config import settings
 from database.identity_vault import identity_vault
@@ -250,6 +251,101 @@ Return JSON only."""
             "estimated_duration": 30
         }
     
+    def _convert_age_to_group(self, age: Optional[int]) -> str:
+        """
+        Convert exact age to age group for privacy.
+        
+        Args:
+            age: Exact age
+            
+        Returns:
+            Age group string
+        """
+        if age is None:
+            return "Unknown"
+        
+        if age < 13:
+            return "child"
+        elif age < 18:
+            return "teenager"
+        elif age < 25:
+            return "early 20s"
+        elif age < 35:
+            return "late 20s to early 30s"
+        elif age < 45:
+            return "late 30s to early 40s"
+        elif age < 55:
+            return "late 40s to early 50s"
+        elif age < 65:
+            return "late 50s to early 60s"
+        else:
+            return "senior"
+    
+    def create_privacy_report(
+        self,
+        pii_data: Dict[str, Any],
+        patient_uuid: str,
+        semantic_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create detailed privacy transformation report.
+        
+        Args:
+            pii_data: Original PII data
+            patient_uuid: Pseudonymized UUID
+            semantic_context: Semantic context
+            
+        Returns:
+            Privacy report showing transformations
+        """
+        transformations = []
+        
+        # Name transformation
+        if pii_data.get('patient_name'):
+            transformations.append({
+                "field": "Patient Name",
+                "original": pii_data['patient_name'],
+                "transformed": f"Patient_{patient_uuid[:8]}",
+                "method": "UUID Pseudonymization"
+            })
+        
+        # Age transformation
+        if pii_data.get('age'):
+            age_group = self._convert_age_to_group(pii_data['age'])
+            transformations.append({
+                "field": "Age",
+                "original": str(pii_data['age']),
+                "transformed": age_group,
+                "method": "Age Group Masking"
+            })
+        
+        # Gender (kept as-is, not identifying alone)
+        if pii_data.get('gender'):
+            transformations.append({
+                "field": "Gender",
+                "original": pii_data['gender'],
+                "transformed": pii_data['gender'],
+                "method": "Retained (non-identifying)"
+            })
+        
+        # Medical info transformation
+        transformations.append({
+            "field": "Medical Information",
+            "original": "Contains patient details",
+            "transformed": f"Semantic category: {semantic_context.get('symptom_category', 'general')}",
+            "method": "Semantic Extraction"
+        })
+        
+        report = {
+            "transformations": transformations,
+            "pii_removed": len([t for t in transformations if t["method"] in ["UUID Pseudonymization", "Age Group Masking"]]),
+            "cloud_safe": True,
+            "patient_uuid": patient_uuid,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        return report
+    
     def pseudonymize_input(self, user_message: str) -> Dict[str, Any]:
         """Compatibility helper used by older scripts.
 
@@ -322,7 +418,8 @@ Return JSON only."""
         1. Extract PII from message
         2. Extract intent
         3. Extract semantic context
-        4. Return structured data for coordinator
+        4. Generate privacy report (if PII exists)
+        5. Return structured data for coordinator
         
         Args:
             user_message: Raw user input
@@ -346,11 +443,23 @@ Return JSON only."""
         semantic_context = self.extract_semantic_context(pii_data['medical_info'])
         logger.info(f"Step 3: Semantic context extracted")
         
-        # Step 4: Prepare output
+        # Step 4: Generate privacy report (if PII exists)
+        privacy_report = None
+        if pii_data.get('patient_name'):
+            # Generate a temporary UUID for the report
+            temp_uuid = str(hash(pii_data['patient_name']))[:8]
+            privacy_report = self.create_privacy_report(
+                pii_data=pii_data,
+                patient_uuid=temp_uuid,
+                semantic_context=semantic_context
+            )
+        
+        # Step 5: Prepare output
         processed_data = {
             'pii': pii_data,
             'intent': intent,
             'semantic_context': semantic_context,
+            'privacy_report': privacy_report,
             'original_message': user_message,
             'cloud_safe': True
         }

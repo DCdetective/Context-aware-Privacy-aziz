@@ -311,7 +311,9 @@ class AgentCoordinator:
                     execution_result['patient_age'] = identity['age']
                     execution_result['patient_gender'] = identity['gender']
             
-            # Step 7: Format final response
+            # Step 7: Format final response (add privacy report)
+            privacy_report = gatekeeper_output.get('privacy_report')
+            
             final_response = {
                 "success": True,
                 "message": execution_result.get('message', 'Task completed successfully'),
@@ -321,6 +323,7 @@ class AgentCoordinator:
                 "session_id": session_id,
                 "result": execution_result,
                 "privacy_safe": True,
+                "privacy_report": privacy_report,
                 "workflow_steps": [
                     "Gatekeeper: PII detection and pseudonymization",
                     "Identity Resolution: Patient disambiguation",
