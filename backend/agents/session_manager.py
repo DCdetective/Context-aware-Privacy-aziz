@@ -140,6 +140,61 @@ class SessionManager:
         self.sessions.clear()
         logger.info("Cleared all sessions")
     
+    def get_conversation_context(self, session_id: str, limit: int = 5) -> str:
+        """
+        Get formatted conversation context for LLM.
+        
+        Args:
+            session_id: Session ID
+            limit: Number of recent messages to include
+            
+        Returns:
+            Formatted conversation history string
+        """
+        history = self.get_history(session_id, limit=limit)
+        
+        if not history:
+            return "No previous conversation in this session."
+        
+        lines = ["Recent conversation:"]
+        for entry in history:
+            role = entry['role'].capitalize()
+            message = entry['message'][:200]  # Truncate long messages
+            lines.append(f"{role}: {message}")
+        
+        return "\n".join(lines)
+
+    def get_session_summary(self, session_id: str) -> Dict[str, Any]:
+        """
+        Get summary of session state.
+        
+        Args:
+            session_id: Session ID
+            
+        Returns:
+            Session summary
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {}
+        
+        active_patient = session.get('active_patient_uuid')
+        patient_name = session.get('patient_name')
+        history_count = len(session.get('conversation_history', []))
+        pending_action = session.get('pending_action') is not None
+        pending_disambiguation = session.get('pending_disambiguation') is not None
+        
+        return {
+            "session_id": session_id,
+            "has_active_patient": active_patient is not None,
+            "patient_uuid": active_patient,
+            "patient_name": patient_name,
+            "conversation_length": history_count,
+            "has_pending_action": pending_action,
+            "needs_disambiguation": pending_disambiguation,
+            "created_at": session.get('created_at').isoformat() if session.get('created_at') else None
+        }
+    
     def set_pending_action(
         self,
         session_id: str,

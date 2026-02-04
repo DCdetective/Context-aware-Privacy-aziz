@@ -93,6 +93,10 @@ class ContextRefinementAgent:
         # Step 2: Format context for LLM
         formatted_context = rag_retriever.format_context_for_llm(rag_context)
         
+        # Step 2.5: Add memory context to prompt
+        memory_context = semantic_context.get('memory_context', '')
+        has_history = semantic_context.get('has_history', False)
+        
         # Step 3: Use LLM to refine and make recommendations
         system_prompt = """You are a medical context refinement assistant.
 
@@ -113,12 +117,17 @@ Semantic Context: {json.dumps(semantic_context)}
 
 {formatted_context}
 
+{memory_context}
+
+Consider the patient's history and previous interactions when making recommendations.
+
 Provide JSON with:
 - recommended_specialty: medical specialty needed
 - recommended_doctor: doctor_id or null
 - urgency_assessment: emergency/urgent/routine
 - estimated_duration: minutes (integer)
 - requires_follow_up: true/false
+- considers_history: true if patient history was used
 - reasoning: brief explanation (using UUID only, no names)"""
 
         try:

@@ -7,6 +7,7 @@ from agents.context_agent import context_agent
 from agents.execution_agent import execution_agent
 from agents.session_manager import session_manager
 from agents.hitl_manager import hitl_manager
+from agents.memory_manager import memory_manager
 from database.identity_vault import identity_vault
 from vector_store.metadata_store import metadata_store
 
@@ -294,6 +295,22 @@ class AgentCoordinator:
                         "privacy_safe": True
                     }
             
+            # Add message to conversation history
+            session_manager.add_to_history(session_id, "user", user_message)
+            
+            # Check for context switch
+            active_patient = session_manager.get_active_patient(session_id)
+            if active_patient:
+                is_context_switch = memory_manager.detect_context_switch(
+                    current_message=user_message,
+                    active_patient_name=active_patient.get('patient_name')
+                )
+                
+                if is_context_switch:
+                    logger.info("Context switch detected - clearing active patient")
+                    session_manager.set_active_patient(session_id, None, None)
+                    active_patient = None
+            
             # Step 1: Gatekeeper processes input
             logger.info("Step 1: Gatekeeper processing...")
             gatekeeper_output = gatekeeper_agent.process_message(user_message)
@@ -386,6 +403,32 @@ class AgentCoordinator:
                     intent=intent
                 )
             
+            # Step 3.5: Retrieve and format memory context (after patient UUID is resolved)
+            if patient_uuid and not patient_uuid.startswith("temp-uuid"):
+                logger.info("Retrieving patient long-term memory...")
+                long_term_memory = memory_manager.get_patient_long_term_memory(
+                    patient_uuid=patient_uuid,
+                    limit=5
+                )
+                
+                # Get short-term memory
+                short_term_memory = session_manager.get_conversation_context(
+                    session_id=session_id,
+                    limit=5
+                )
+                
+                # Format for LLM
+                memory_context = memory_manager.format_memory_for_llm(
+                    short_term=short_term_memory,
+                    long_term=long_term_memory
+                )
+                
+                # Add memory to semantic context
+                semantic_context['memory_context'] = memory_context
+                semantic_context['has_history'] = len(long_term_memory.get('medical_records', [])) > 0
+                
+                logger.info(f"Memory context prepared: {len(long_term_memory.get('medical_records', []))} records")
+            
             # Step 4: Context Agent refines context
             logger.info("Step 4: Context Agent refining context...")
             refined_context = context_agent.refine_context(
@@ -475,6 +518,13 @@ class AgentCoordinator:
                     "Gatekeeper: Re-identification for output"
                 ]
             }
+            
+            # Add response to conversation history
+            session_manager.add_to_history(
+                session_id,
+                "assistant",
+                final_response.get("message", "")
+            )
             
             logger.info("=" * 70)
             logger.info("COORDINATOR: Workflow completed successfully")
