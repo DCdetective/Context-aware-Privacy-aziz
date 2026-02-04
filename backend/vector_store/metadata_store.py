@@ -80,8 +80,16 @@ class MetadataStore:
         context_text += f"Category: {semantic_context.get('symptom_category', 'general')}. "
         context_text += f"Urgency: {semantic_context.get('urgency_level', 'routine')}. "
         
+        logger.info(f"Storing metadata for patient: {patient_uuid}")
+        logger.info(f"Context text: {context_text}")
+        
         # Generate embedding
         embedding = embedding_generator.generate_embedding(context_text)
+        logger.info(f"Generated embedding dimension: {len(embedding)}")
+        
+        # Verify embedding is not all zeros
+        if all(val == 0.0 for val in embedding):
+            logger.warning("WARNING: Embedding is all zeros! Check embedding generator.")
         
         # Create metadata (NO PII)
         metadata = {
@@ -98,9 +106,15 @@ class MetadataStore:
         vector_id = f"{patient_uuid}_{int(time.time() * 1000)}"
         
         # Upsert to Pinecone
-        self.index.upsert(vectors=[(vector_id, embedding, metadata)])
+        logger.info(f"Upserting vector ID: {vector_id}")
+        upsert_response = self.index.upsert(vectors=[(vector_id, embedding, metadata)])
+        logger.info(f"Upsert response: {upsert_response}")
         
-        logger.info(f"Stored metadata for patient UUID: {patient_uuid}")
+        # Verify upsert succeeded
+        if hasattr(upsert_response, 'upserted_count'):
+            logger.info(f"Successfully upserted {upsert_response.upserted_count} vectors")
+        
+        logger.info(f"✓ Stored metadata for patient UUID: {patient_uuid}")
         return vector_id
     
     def retrieve_patient_history(

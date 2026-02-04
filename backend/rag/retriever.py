@@ -39,40 +39,62 @@ class RAGRetriever:
         Returns:
             Retrieved context including patient history and relevant knowledge
         """
-        logger.info(f"Retrieving context for intent: {intent}")
+        logger.info(f"=" * 60)
+        logger.info(f"RAG RETRIEVER: Retrieving context")
+        logger.info(f"Patient UUID: {patient_uuid[:8]}...")
+        logger.info(f"Intent: {intent}")
+        logger.info(f"=" * 60)
         
         # 1. Retrieve patient history from metadata store
         patient_history = []
         if metadata_store:
+            logger.info("Retrieving patient history...")
             patient_history = metadata_store.retrieve_patient_history(
                 patient_uuid=patient_uuid,
                 limit=5
             )
+            logger.info(f"✓ Found {len(patient_history)} history records")
+            
+            if not patient_history:
+                logger.warning(f"⚠ No patient history found for UUID: {patient_uuid}")
+        else:
+            logger.warning("⚠ Metadata store not available")
         
         # 2. Search for relevant doctors
         specialty = semantic_context.get("symptom_category", "general")
         relevant_doctors = []
         if synthetic_store:
+            logger.info(f"Searching for {specialty} specialists...")
             relevant_doctors = synthetic_store.search_doctors(
                 specialty=specialty,
                 top_k=3
             )
+            logger.info(f"✓ Found {len(relevant_doctors)} doctors")
+            
+            if not relevant_doctors:
+                logger.warning(f"⚠ No doctors found for specialty: {specialty}")
+        else:
+            logger.warning("⚠ Synthetic store not available")
         
         # 3. Search medical knowledge
         relevant_knowledge = []
         if synthetic_store:
+            logger.info(f"Searching medical knowledge...")
             relevant_knowledge = synthetic_store.search_medical_knowledge(
                 query=medical_info,
                 top_k=3
             )
+            logger.info(f"✓ Found {len(relevant_knowledge)} knowledge items")
         
         # 4. Search similar cases
         similar_cases = []
         if synthetic_store:
+            logger.info(f"Searching similar cases...")
             similar_cases = synthetic_store.search_similar_cases(
                 query=medical_info,
                 top_k=2
             )
+            logger.info(f"✓ Found {len(similar_cases)} similar cases")
         
         context = {
             "patient_uuid": patient_uuid,
@@ -84,8 +106,13 @@ class RAGRetriever:
             "semantic_context": semantic_context
         }
         
-        logger.info(f"Context retrieved: {len(patient_history)} history records, "
-                   f"{len(relevant_doctors)} doctors, {len(relevant_knowledge)} knowledge items")
+        logger.info(f"=" * 60)
+        logger.info(f"RAG RETRIEVAL SUMMARY:")
+        logger.info(f"  - History records: {len(patient_history)}")
+        logger.info(f"  - Doctors found: {len(relevant_doctors)}")
+        logger.info(f"  - Knowledge items: {len(relevant_knowledge)}")
+        logger.info(f"  - Similar cases: {len(similar_cases)}")
+        logger.info(f"=" * 60)
         
         return context
     
