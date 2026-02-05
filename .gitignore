@@ -40,3 +40,4 @@ htmlcov/
 # Temporary files
 tmp_*
 .venv/
+.env.example
