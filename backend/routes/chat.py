@@ -38,38 +38,47 @@ async def send_message(chat_message: ChatMessage):
         logger.info("=" * 70)
         
         # Process through coordinator
-        result = coordinator.process_message(chat_message.message)
+        result = coordinator.process_message(
+            chat_message.message,
+            session_id=chat_message.session_id
+        )
         
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message", "Processing failed"))
         
-        # Add privacy details for visualization
-        privacy_details = {
-            "pii_detected": result.get("result", {}).get("patient_name") is not None,
-            "original_contains": {
-                "name": result.get("result", {}).get("patient_name", "N/A"),
-                "age": result.get("result", {}).get("patient_age", "N/A"),
-                "gender": result.get("result", {}).get("patient_gender", "N/A")
-            },
-            "pseudonymized_to": result.get("patient_uuid"),
-            "cloud_safe": result.get("privacy_safe"),
-            "workflow_steps": result.get("workflow_steps", [])
-        }
+        # Format privacy details for frontend
+        privacy_report = result.get('privacy_report')
+        privacy_details = None
+        
+        if privacy_report:
+            privacy_details = {
+                "transformations": privacy_report.get('transformations', []),
+                "pii_removed": privacy_report.get('pii_removed', 0),
+                "cloud_safe": privacy_report.get('cloud_safe', True)
+            }
         
         # Format response
         response = ChatResponse(
             success=result["success"],
             message=result["message"],
-            intent=result["intent"],
+            intent=result.get("intent", "general"),
             patient_uuid=result.get("patient_uuid"),
             patient_name=result.get("patient_name"),
             result={
                 **result.get("result", {}),
                 "privacy_details": privacy_details
             },
-            privacy_safe=result["privacy_safe"],
+            privacy_safe=result.get("privacy_safe", True),
             workflow_steps=result.get("workflow_steps", [])
         )
+        
+        # Add disambiguation data if present
+        if result.get("disambiguation_data"):
+            response.result["disambiguation_data"] = result["disambiguation_data"]
+        
+        # Add session ID
+        if result.get("session_id"):
+            response.result["session_id"] = result["session_id"]
         
         logger.info("CHAT API: Message processed successfully")
         logger.info("=" * 70)

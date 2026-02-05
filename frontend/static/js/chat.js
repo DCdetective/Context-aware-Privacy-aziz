@@ -142,6 +142,27 @@ function addBotMessage(data) {
     `;
 
     chatMessages.appendChild(messageDiv);
+    
+    // Display privacy report if available
+    if (data.result && data.result.privacy_details && data.result.privacy_details.transformations) {
+        displayPrivacyReport(data.result.privacy_details, messageDiv);
+    }
+    
+    // Display workflow steps if available
+    if (data.workflow_steps && data.workflow_steps.length > 0) {
+        displayWorkflowSteps(data.workflow_steps, messageDiv);
+    }
+    
+    // Handle disambiguation
+    if (data.intent === 'disambiguation_required' && data.result && data.result.disambiguation_data) {
+        displayDisambiguation(data.result.disambiguation_data, messageDiv);
+    }
+    
+    // Handle confirmation
+    if (data.intent === 'awaiting_confirmation' && data.message.toLowerCase().includes('confirm')) {
+        displayConfirmationSummary(data.message, messageDiv);
+    }
+    
     scrollToBottom();
 
     // Add to history
@@ -278,4 +299,183 @@ function escapeHtml(text) {
 function capitalizeFirst(str) {
     if (!str) return '';
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+/**
+ * Display privacy transformation report
+ */
+function displayPrivacyReport(privacyReport, messageDiv) {
+    if (!privacyReport || !privacyReport.transformations) {
+        return;
+    }
+    
+    // Create privacy panel
+    const privacyPanel = document.createElement('div');
+    privacyPanel.className = 'privacy-panel';
+    
+    const header = document.createElement('div');
+    header.className = 'privacy-header';
+    header.innerHTML = '<span class="privacy-icon">🔒</span> Privacy Protection Applied';
+    
+    const transformList = document.createElement('div');
+    transformList.className = 'privacy-transforms';
+    
+    privacyReport.transformations.forEach(transform => {
+        const item = document.createElement('div');
+        item.className = 'privacy-item';
+        
+        const field = document.createElement('span');
+        field.className = 'privacy-field';
+        field.textContent = transform.field + ':';
+        
+        const transformation = document.createElement('span');
+        transformation.className = 'privacy-transformation';
+        transformation.innerHTML = `${escapeHtml(transform.original)} → <strong>${escapeHtml(transform.transformed)}</strong>`;
+        
+        const method = document.createElement('span');
+        method.className = 'privacy-method';
+        method.textContent = `(${transform.method})`;
+        
+        item.appendChild(field);
+        item.appendChild(transformation);
+        item.appendChild(method);
+        transformList.appendChild(item);
+    });
+    
+    privacyPanel.appendChild(header);
+    privacyPanel.appendChild(transformList);
+    
+    messageDiv.querySelector('.bubble').appendChild(privacyPanel);
+}
+
+/**
+ * Display workflow steps
+ */
+function displayWorkflowSteps(steps, messageDiv) {
+    if (!steps || steps.length === 0) {
+        return;
+    }
+    
+    const workflowPanel = document.createElement('div');
+    workflowPanel.className = 'workflow-panel collapsed';
+    
+    const header = document.createElement('div');
+    header.className = 'workflow-header';
+    header.innerHTML = '<span class="workflow-icon">⚙️</span> Agent Workflow <span class="workflow-toggle">▼</span>';
+    header.onclick = () => {
+        workflowPanel.classList.toggle('collapsed');
+    };
+    
+    const stepsList = document.createElement('div');
+    stepsList.className = 'workflow-steps';
+    
+    steps.forEach((step, index) => {
+        const stepItem = document.createElement('div');
+        stepItem.className = 'workflow-step';
+        stepItem.innerHTML = `<span class="step-number">${index + 1}</span> ${escapeHtml(step)}`;
+        stepsList.appendChild(stepItem);
+    });
+    
+    workflowPanel.appendChild(header);
+    workflowPanel.appendChild(stepsList);
+    
+    messageDiv.querySelector('.bubble').appendChild(workflowPanel);
+}
+
+/**
+ * Display disambiguation options
+ */
+function displayDisambiguation(disambiguationData, messageDiv) {
+    if (!disambiguationData || !disambiguationData.candidates) {
+        return;
+    }
+    
+    const disambigPanel = document.createElement('div');
+    disambigPanel.className = 'disambiguation-panel';
+    
+    const header = document.createElement('div');
+    header.className = 'disambig-header';
+    header.textContent = '👥 Multiple Patients Found - Please Select:';
+    
+    const candidatesList = document.createElement('div');
+    candidatesList.className = 'candidate-list';
+    
+    disambiguationData.candidates.forEach(candidate => {
+        const card = document.createElement('div');
+        card.className = 'candidate-card';
+        card.onclick = () => selectPatient(candidate.patient_uuid);
+        
+        const name = document.createElement('div');
+        name.className = 'candidate-name';
+        name.textContent = candidate.patient_name;
+        
+        const details = document.createElement('div');
+        details.className = 'candidate-details';
+        details.innerHTML = `
+            UUID: ${candidate.patient_uuid.substring(0, 8)}...<br>
+            Age: ${candidate.age || 'N/A'} | Gender: ${candidate.gender || 'N/A'}<br>
+            Last seen: ${candidate.last_accessed ? new Date(candidate.last_accessed).toLocaleDateString() : 'Never'}
+        `;
+        
+        card.appendChild(name);
+        card.appendChild(details);
+        candidatesList.appendChild(card);
+    });
+    
+    disambigPanel.appendChild(header);
+    disambigPanel.appendChild(candidatesList);
+    
+    messageDiv.querySelector('.bubble').appendChild(disambigPanel);
+}
+
+/**
+ * Select patient from disambiguation
+ */
+function selectPatient(patientUuid) {
+    const messageInput = document.getElementById('messageInput');
+    messageInput.value = patientUuid;
+    document.getElementById('chatForm').dispatchEvent(new Event('submit'));
+}
+
+/**
+ * Display confirmation summary
+ */
+function displayConfirmationSummary(message, messageDiv) {
+    // Parse the message for confirmation details
+    const confirmPanel = document.createElement('div');
+    confirmPanel.className = 'confirmation-panel';
+    
+    const messageText = document.createElement('div');
+    messageText.className = 'confirmation-message';
+    messageText.textContent = message;
+    
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'confirmation-buttons';
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'confirm-btn';
+    confirmBtn.textContent = '✓ Confirm';
+    confirmBtn.onclick = () => sendConfirmation('yes');
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.textContent = '✗ Cancel';
+    cancelBtn.onclick = () => sendConfirmation('no');
+    
+    buttonContainer.appendChild(confirmBtn);
+    buttonContainer.appendChild(cancelBtn);
+    
+    confirmPanel.appendChild(messageText);
+    confirmPanel.appendChild(buttonContainer);
+    
+    messageDiv.querySelector('.bubble').appendChild(confirmPanel);
+}
+
+/**
+ * Send confirmation response
+ */
+function sendConfirmation(response) {
+    const messageInput = document.getElementById('messageInput');
+    messageInput.value = response;
+    document.getElementById('chatForm').dispatchEvent(new Event('submit'));
 }

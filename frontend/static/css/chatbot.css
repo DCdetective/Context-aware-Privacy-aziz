@@ -579,3 +579,255 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ============================================
+   Privacy Panel Styles (Prompt 6)
+   ============================================ */
+
+/* Privacy Panel */
+.privacy-panel {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(16, 163, 127, 0.1);
+    border-left: 3px solid #10a37f;
+    border-radius: 8px;
+    font-size: 0.9em;
+}
+
+.privacy-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #10a37f;
+}
+
+.privacy-icon {
+    font-size: 1.2em;
+}
+
+.privacy-transforms {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.privacy-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 0;
+    font-size: 0.85em;
+}
+
+.privacy-field {
+    color: #8e8ea0;
+    min-width: 100px;
+}
+
+.privacy-item .privacy-transformation {
+    color: #ececf1;
+}
+
+.privacy-item .privacy-transformation strong {
+    color: #10a37f;
+}
+
+.privacy-method {
+    color: #8e8ea0;
+    font-style: italic;
+    font-size: 0.9em;
+}
+
+/* Workflow Panel */
+.workflow-panel {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(64, 65, 79, 0.5);
+    border-radius: 8px;
+    font-size: 0.9em;
+}
+
+.workflow-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    font-weight: 600;
+    color: #ececf1;
+    user-select: none;
+}
+
+.workflow-icon {
+    margin-right: 8px;
+}
+
+.workflow-toggle {
+    font-size: 0.8em;
+    transition: transform 0.2s;
+}
+
+.workflow-panel.collapsed .workflow-steps {
+    display: none;
+}
+
+.workflow-panel.collapsed .workflow-toggle {
+    transform: rotate(-90deg);
+}
+
+.workflow-steps {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.workflow-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    color: #d1d5db;
+    font-size: 0.85em;
+}
+
+.step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: #10a37f;
+    color: #fff;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 0.85em;
+    flex-shrink: 0;
+}
+
+/* Disambiguation Panel */
+.disambiguation-panel {
+    margin-top: 12px;
+    padding: 16px;
+    background: rgba(52, 53, 65, 0.8);
+    border-radius: 12px;
+}
+
+.disambig-header {
+    font-weight: 600;
+    font-size: 1em;
+    margin-bottom: 16px;
+    color: #ececf1;
+}
+
+.candidate-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.candidate-card {
+    padding: 16px;
+    background: rgba(68, 70, 84, 0.6);
+    border: 1px solid rgba(86, 88, 105, 0.5);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.candidate-card:hover {
+    background: rgba(68, 70, 84, 0.9);
+    border-color: #10a37f;
+    transform: translateX(4px);
+}
+
+.candidate-name {
+    font-weight: 600;
+    font-size: 1.05em;
+    color: #ececf1;
+    margin-bottom: 8px;
+}
+
+.candidate-details {
+    font-size: 0.85em;
+    color: #8e8ea0;
+    line-height: 1.6;
+}
+
+/* Confirmation Panel */
+.confirmation-panel {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(52, 53, 65, 0.8);
+    border-radius: 12px;
+    border: 1px solid rgba(86, 88, 105, 0.5);
+}
+
+.confirmation-message {
+    color: #ececf1;
+    margin-bottom: 16px;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.confirmation-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.confirm-btn,
+.cancel-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.confirm-btn {
+    background: #10a37f;
+    color: #fff;
+}
+
+.confirm-btn:hover {
+    background: #0d8c6a;
+    transform: translateY(-1px);
+}
+
+.cancel-btn {
+    background: rgba(255, 75, 75, 0.2);
+    color: #ff4b4b;
+    border: 1px solid rgba(255, 75, 75, 0.5);
+}
+
+.cancel-btn:hover {
+    background: rgba(255, 75, 75, 0.3);
+    border-color: #ff4b4b;
+}
+
+/* Mobile Responsive for New Components */
+@media (max-width: 768px) {
+    .privacy-panel,
+    .workflow-panel,
+    .disambiguation-panel,
+    .confirmation-panel {
+        padding: 10px;
+    }
+    
+    .candidate-card {
+        padding: 12px;
+    }
+    
+    .confirmation-buttons {
+        flex-direction: column;
+    }
+    
+    .confirm-btn,
+    .cancel-btn {
+        width: 100%;
+    }
+}
