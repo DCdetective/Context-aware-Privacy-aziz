@@ -2,303 +2,214 @@
 
 ## Prerequisites
 
-### System Requirements
-- **OS:** Windows 10/11, macOS 10.15+, or Linux (Ubuntu 20.04+)
-- **Python:** 3.12.2 or higher
-- **RAM:** Minimum 8GB (16GB recommended for Ollama)
-- **Storage:** 10GB free space
-- **Network:** Internet connection for cloud APIs
+- **Python 3.9+**
+- **Pinecone account** (for vector storage)
+- **Groq API key** (for cloud LLM)
+- **Ollama** (optional, for local LLM PII detection)
+- **SQLite** (included with Python)
 
-### Required Accounts
-1. **Groq Account:** Free tier (https://console.groq.com)
-2. **Pinecone Account:** Free tier (https://www.pinecone.io)
-3. **Ollama:** Installed locally (https://ollama.ai)
+---
 
-## Step-by-Step Deployment
+## Environment Variables
 
-### 1. Install Ollama
+Create a `.env` file in the project root:
 
-**macOS/Linux:**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-**Windows:**
-Download and install from https://ollama.com/download
-
-**Verify Installation:**
-```bash
-ollama --version
-```
-
-**Pull Llama 3.1 Model:**
-```bash
-ollama pull llama3.1
-```
-
-### 2. Clone and Setup Project
-
-```bash
-# Clone repository (or extract from zip)
-cd medshield
-
-# Create virtual environment
-python3.12 -m venv .venv
-
-# Activate virtual environment
-# On Windows:
-.venv\Scripts\activate
-# On macOS/Linux:
-source .venv/bin/activate
-
-# Install dependencies
-pip install --upgrade pip
-pip install -r backend/requirements.txt
-```
-
-### 3. Configure Environment Variables
-
-```bash
-# Copy example environment file
-cp .env.example .env
-
-# Edit .env file
-nano .env  # or use your preferred editor
-```
-
-**Required Configuration:**
 ```env
-# Groq API (get from https://console.groq.com)
-GROQ_API_KEY=your_groq_api_key_here
+# Required
+GROQ_API_KEY=your-groq-api-key
+PINECONE_API_KEY=your-pinecone-api-key
+PINECONE_ENVIRONMENT=us-east-1
 
-# Pinecone API (get from https://app.pinecone.io)
-PINECONE_API_KEY=your_pinecone_api_key_here
-PINECONE_ENVIRONMENT=us-east-1-aws
-PINECONE_INDEX_NAME=medshield-semantic-store
-
-# Ollama Configuration
+# Optional
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=llama3.1
-
-# Database
-SQLITE_DB_PATH=./backend/database/identity_vault.db
+OPENAI_API_KEY=your-openai-api-key
 
 # Server
 BACKEND_HOST=0.0.0.0
 BACKEND_PORT=8000
-
-# Testing (set to false for production)
-TESTING_MODE=false
-
-# Logging
 LOG_LEVEL=INFO
+
+# Security
+SECRET_KEY=change-this-in-production
+
+# Testing
+TESTING_MODE=false
 ```
 
-### 4. Initialize Database
+---
+
+## Local Development
+
+### Quick Start
 
 ```bash
+# 1. Install dependencies
 cd backend
-python -c "from database.identity_vault import identity_vault; print('Database initialized')"
+pip install -r requirements.txt
+
+# 2. Run tests
+python -m pytest tests/ -v
+
+# 3. Start server
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 4. Open browser
+# Navigate to http://localhost:8000
 ```
 
-### 5. Run Tests
+### With Ollama (Local LLM)
 
 ```bash
-# Run all tests
-python run_tests.py
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
 
-# Or run specific test suites
-pytest tests/test_identity_vault.py -v
-pytest tests/test_privacy_compliance.py -v
-```
+# Pull model
+ollama pull llama3.1
 
-### 6. Start the Application
-
-```bash
-# From backend directory
-python main.py
-```
-
-**Expected Output:**
-```
-============================================================
-🏥 MedShield - Privacy-Preserving Medical Assistant
-============================================================
-Initializing Local Identity Vault...
-Database path: ./backend/database/identity_vault.db
-Identity Vault initialized successfully
-Initializing Semantic Anchor Store...
-Semantic Store: 0 anchors stored
-Initializing Multi-Agent System...
-  - Gatekeeper Agent (Ollama) ✓
-  - Coordinator Agent (Groq) ✓
-  - Worker Agent (Groq) ✓
-============================================================
-🚀 System Ready
-============================================================
-INFO:     Started server process [12345]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-```
-
-### 7. Access the Application
-
-Open your web browser and navigate to:
-```
-http://localhost:8000
-```
-
-## Verification Checklist
-
-- [ ] Ollama installed and llama3.1 model pulled
-- [ ] Python 3.12.2 installed
-- [ ] Virtual environment activated
-- [ ] Dependencies installed
-- [ ] .env file configured with API keys
-- [ ] Database initialized
-- [ ] All tests passing
-- [ ] Server starts without errors
-- [ ] Frontend accessible in browser
-- [ ] Health endpoint returns 200: `curl http://localhost:8000/health`
-
-## Troubleshooting
-
-### Ollama Connection Issues
-
-**Problem:** "Error calling Ollama: Connection refused"
-
-**Solution:**
-```bash
-# Check Ollama is running
-ollama list
-
-# If not running, start it
+# Start Ollama (runs on port 11434)
 ollama serve
 
-# Verify connection
-curl http://localhost:11434/api/tags
+# Start MedShield backend
+cd backend
+uvicorn main:app --reload
 ```
 
-### Groq API Errors
+---
 
-**Problem:** "Error calling Groq API: Invalid API key"
+## Docker Deployment
 
-**Solution:**
-1. Verify API key in .env file
-2. Check key at https://console.groq.com
-3. Ensure no extra spaces in API key
-4. Restart server after updating .env
-
-### Pinecone Connection Issues
-
-**Problem:** "Failed to initialize Pinecone"
-
-**Solution:**
-1. Verify Pinecone API key and environment
-2. Check index name matches configuration
-3. Ensure free tier hasn't expired
-4. Use mock store for testing: `TESTING_MODE=true`
-
-### Port Already in Use
-
-**Problem:** "Address already in use: 8000"
-
-**Solution:**
-```bash
-# Find process using port 8000
-# On Linux/Mac:
-lsof -i :8000
-# On Windows:
-netstat -ano | findstr :8000
-
-# Kill the process or use different port
-# Edit .env: BACKEND_PORT=8001
-```
-
-### Module Import Errors
-
-**Problem:** "ModuleNotFoundError: No module named 'fastapi'"
-
-**Solution:**
-```bash
-# Ensure virtual environment is activated
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# Reinstall dependencies
-pip install -r backend/requirements.txt
-```
-
-## Production Deployment (Future)
-
-### Docker Deployment
+### Dockerfile
 
 ```dockerfile
-# Dockerfile (future enhancement)
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
-COPY backend/ /app/backend/
-COPY frontend/ /app/frontend/
-COPY requirements.txt /app/
 
-RUN pip install -r requirements.txt
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+COPY synthetic_data/ ./synthetic_data/
+COPY .env .
+
+WORKDIR /app/backend
 
 EXPOSE 8000
-CMD ["python", "backend/main.py"]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-### Environment-Specific Configurations
+### Docker Compose
 
-- **Development:** `TESTING_MODE=true`, `LOG_LEVEL=DEBUG`
-- **Staging:** `TESTING_MODE=false`, `LOG_LEVEL=INFO`
-- **Production:** Add authentication, HTTPS, monitoring
+```yaml
+version: '3.8'
 
-## Maintenance
-
-### Regular Tasks
-
-1. **Database Backup:**
-```bash
-cp backend/database/identity_vault.db backend/database/identity_vault_backup_$(date +%Y%m%d).db
+services:
+  medshield:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT}
+    volumes:
+      - ./data:/app/backend/database
+    restart: unless-stopped
 ```
 
-2. **Log Rotation:**
+### Build and Run
+
 ```bash
-# Implement log rotation for production
+docker build -t medshield .
+docker run -p 8000:8000 --env-file .env medshield
 ```
 
-3. **Update Dependencies:**
+---
+
+## Production Considerations
+
+### Security
+
+- **Change SECRET_KEY** to a strong random value
+- **Use HTTPS** in production (reverse proxy with nginx)
+- **Rate limiting**: Configure nginx or use FastAPI middleware
+- **CORS**: Restrict `allow_origins` in `main.py` to your domain
+
+### Database Backups
+
 ```bash
-pip list --outdated
-pip install --upgrade <package_name>
+# Backup identity vault (contains PII - handle with care!)
+cp backend/database/identity_vault.db backup/identity_vault_$(date +%Y%m%d).db
+
+# Backup sessions
+cp backend/database/sessions.db backup/sessions_$(date +%Y%m%d).db
 ```
 
 ### Monitoring
 
-**Health Check Endpoint:**
+- **Health check**: `GET /health`
+- **Privacy report**: `GET /api/chat/privacy-report`
+- **Application logs**: Configure `LOG_LEVEL=INFO` or `DEBUG`
+
+### Privacy Audit Logs
+
 ```bash
+# Check for any privacy violations
+python -c "
+from database.identity_vault import identity_vault
+report = identity_vault.verify_privacy_compliance()
+print(f'Privacy compliant: {report[\"privacy_compliant\"]}')
+print(f'Cloud exposed: {report[\"cloud_exposed_count\"]}')
+print(f'Total operations: {report[\"total_operations\"]}')
+"
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### Groq API Errors
+```
+Error: Invalid API key
+```
+**Solution**: Verify `GROQ_API_KEY` in `.env` file.
+
+#### Ollama Connection Failed
+```
+Warning: local LLM unavailable, using regex fallback
+```
+**Solution**: This is non-critical. The system falls back to regex-based PII detection. To fix, ensure Ollama is running: `ollama serve`
+
+#### Pinecone Connection Failed
+```
+Warning: Failed to initialize Pinecone stores, using mocks
+```
+**Solution**: Check `PINECONE_API_KEY` and `PINECONE_ENVIRONMENT`. In testing mode, mock stores are used automatically.
+
+#### Database Locked
+```
+Error: database is locked
+```
+**Solution**: Ensure only one instance is running, or use WAL mode for SQLite.
+
+---
+
+## Testing in Production
+
+```bash
+# Run health check
 curl http://localhost:8000/health
+
+# Test chat endpoint
+curl -X POST http://localhost:8000/api/chat/message \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello, what can you help with?"}'
+
+# Check privacy compliance
+curl http://localhost:8000/api/chat/privacy-report
 ```
-
-**Expected Response:**
-```json
-{
-  "status": "healthy",
-  "components": {
-    "identity_vault": "operational",
-    "semantic_store": "operational",
-    "gatekeeper_agent": "operational",
-    "coordinator_agent": "operational",
-    "worker_agent": "operational"
-  }
-}
-```
-
-## Support
-
-For issues during deployment:
-1. Check logs in console output
-2. Verify all prerequisites installed
-3. Review troubleshooting section
-4. Check test results: `python run_tests.py`

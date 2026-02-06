@@ -324,5 +324,291 @@ Return JSON with:
         return result
 
 
-# Global instance
+class SummaryWorker:
+    """
+    Summary Worker (Prompt 8) – Generates comprehensive patient summaries.
+    
+    Works with ContextAgent's in-memory storage to aggregate patient data
+    and generate coherent medical summaries without external LLM calls.
+    """
+
+    def __init__(self):
+        """Initialize Summary Worker."""
+        logger.info("Summary Worker initialized")
+
+    async def generate_patient_summary(
+        self,
+        patient_uuid: str,
+        summary_type: str = "full",  # "full" | "recent" | "specific"
+        date_range: dict = None,  # {"start": str, "end": str}
+    ) -> dict:
+        """
+        Generate comprehensive patient summary.
+
+        Returns: {
+            "patient_info": dict,
+            "timeline": List[dict],
+            "appointments": {"total": int, "list": List[dict]},
+            "symptoms": {"total": int, "list": List[dict]},
+            "follow_ups": {"total": int, "list": List[dict]},
+            "summary_text": str,
+            "key_insights": List[str]
+        }
+        """
+        from agents.context_agent import context_agent
+
+        # Get all patient interactions
+        all_interactions = context_agent.retrieve_patient_history(patient_uuid, limit=10000)
+
+        # Apply date range filter if specified
+        if date_range:
+            all_interactions = self._filter_by_date_range(all_interactions, date_range)
+
+        # Apply summary type filter
+        if summary_type == "recent":
+            # Last 30 days
+            from datetime import datetime, timedelta, timezone
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+            all_interactions = [
+                i for i in all_interactions
+                if i["metadata"].get("timestamp", "") >= cutoff
+            ]
+
+        # Categorize
+        appointments = [i for i in all_interactions if i["metadata"]["type"] == "appointment"]
+        symptoms = [i for i in all_interactions if i["metadata"]["type"] == "symptom"]
+        follow_ups = [i for i in all_interactions if i["metadata"]["type"] == "followup"]
+        questions = [i for i in all_interactions if i["metadata"]["type"] == "question"]
+
+        # Build timeline (chronological order)
+        timeline = sorted(
+            all_interactions,
+            key=lambda x: x["metadata"].get("timestamp", "")
+        )
+
+        # Get patient info
+        patient_info = {"patient_uuid": patient_uuid}
+        try:
+            vault = identity_vault
+            identity = vault.reidentify_patient(patient_uuid, component="summary_worker")
+            if identity:
+                patient_info["patient_name"] = identity.get("patient_name")
+                patient_info["age"] = identity.get("age")
+                patient_info["gender"] = identity.get("gender")
+        except Exception:
+            pass
+
+        # Generate key insights
+        key_insights = self._extract_key_insights(appointments, symptoms, follow_ups)
+
+        # Generate summary text
+        summary_text = self._generate_summary_text(
+            patient_uuid, all_interactions, appointments, symptoms, follow_ups, key_insights
+        )
+
+        # Handle empty history
+        if not all_interactions:
+            summary_text = f"No interactions found for patient {patient_uuid[:8]}. This is a new patient with no medical history on file."
+
+        return {
+            "patient_info": patient_info,
+            "timeline": [
+                {
+                    "type": t["metadata"]["type"],
+                    "content": t["metadata"]["content"],
+                    "timestamp": t["metadata"].get("timestamp", ""),
+                }
+                for t in timeline
+            ],
+            "appointments": {
+                "total": len(appointments),
+                "list": [
+                    {
+                        "content": a["metadata"]["content"],
+                        "timestamp": a["metadata"].get("timestamp", ""),
+                    }
+                    for a in appointments
+                ],
+            },
+            "symptoms": {
+                "total": len(symptoms),
+                "list": [
+                    {
+                        "content": s["metadata"]["content"],
+                        "timestamp": s["metadata"].get("timestamp", ""),
+                    }
+                    for s in symptoms
+                ],
+            },
+            "follow_ups": {
+                "total": len(follow_ups),
+                "list": [
+                    {
+                        "content": f["metadata"]["content"],
+                        "timestamp": f["metadata"].get("timestamp", ""),
+                    }
+                    for f in follow_ups
+                ],
+            },
+            "summary_text": summary_text,
+            "key_insights": key_insights,
+            "total_interactions": len(all_interactions),
+            "summary_type": summary_type,
+        }
+
+    async def generate_specific_summary(
+        self,
+        patient_uuid: str,
+        query: str
+    ) -> dict:
+        """
+        Generate summary for specific query.
+        E.g., "Show me all cardiology appointments"
+        """
+        from agents.context_agent import context_agent
+
+        # Determine filter type from query
+        query_lower = query.lower()
+
+        # Check if filtering by interaction type
+        interaction_type = None
+        if any(w in query_lower for w in ["appointment", "appointments", "visit", "visits"]):
+            interaction_type = "appointment"
+        elif any(w in query_lower for w in ["symptom", "symptoms"]):
+            interaction_type = "symptom"
+        elif any(w in query_lower for w in ["follow-up", "followup", "follow up"]):
+            interaction_type = "followup"
+
+        if interaction_type:
+            results = context_agent.filter_interactions(
+                patient_uuid=patient_uuid,
+                interaction_type=interaction_type,
+                limit=50
+            )
+        else:
+            # Semantic search
+            results = context_agent.semantic_search(
+                query=query,
+                patient_uuid=patient_uuid,
+                top_k=10
+            )
+
+        # Filter by specialty if mentioned
+        specialty_keywords = {
+            "cardiology": ["cardiology", "cardiac", "heart", "chest"],
+            "neurology": ["neurology", "neurological", "brain", "headache"],
+            "respiratory": ["respiratory", "lung", "breathing", "pulmonary"],
+            "dermatology": ["dermatology", "skin", "rash"],
+            "orthopedics": ["orthopedics", "bone", "joint", "fracture"],
+        }
+
+        for specialty, keywords in specialty_keywords.items():
+            if any(kw in query_lower for kw in keywords):
+                results = [
+                    r for r in results
+                    if any(kw in r["metadata"].get("content", "").lower() for kw in keywords)
+                ]
+                break
+
+        # Build summary text
+        if not results:
+            summary_text = f"No results found for query: '{query}' for patient {patient_uuid[:8]}."
+        else:
+            parts = [f"Found {len(results)} result(s) for '{query}':"]
+            for i, r in enumerate(results[:10], 1):
+                content = r["metadata"].get("content", "N/A")[:100]
+                ts = r["metadata"].get("timestamp", "unknown date")
+                parts.append(f"{i}. [{r['metadata']['type']}] {content} (at {ts})")
+            summary_text = "\n".join(parts)
+
+        return {
+            "results": results,
+            "summary_text": summary_text,
+            "query": query,
+            "total_results": len(results),
+        }
+
+    def _filter_by_date_range(self, interactions: list, date_range: dict) -> list:
+        """Filter interactions by date range."""
+        start = date_range.get("start", "")
+        end = date_range.get("end", "9999")
+        return [
+            i for i in interactions
+            if start <= i["metadata"].get("timestamp", "") <= end
+        ]
+
+    def _extract_key_insights(self, appointments, symptoms, follow_ups) -> list:
+        """Extract key insights from patient data."""
+        insights = []
+
+        # Recurring symptoms
+        symptom_counts = {}
+        for s in symptoms:
+            content = s["metadata"].get("content", "").lower()
+            for word in ["headache", "fever", "cough", "pain", "nausea", "fatigue",
+                         "dizziness", "rash", "swelling", "breathing"]:
+                if word in content:
+                    symptom_counts[word] = symptom_counts.get(word, 0) + 1
+
+        for symptom, count in symptom_counts.items():
+            if count >= 2:
+                insights.append(f"Recurring symptom: {symptom} (reported {count} times)")
+
+        # Appointment patterns
+        if len(appointments) >= 3:
+            insights.append(f"Frequent visitor: {len(appointments)} appointments on record")
+
+        # Specialties visited
+        specialties = set()
+        for a in appointments:
+            content = a["metadata"].get("content", "").lower()
+            for spec in ["cardiology", "neurology", "dermatology", "respiratory",
+                         "orthopedics", "gastroenterology", "pediatrics"]:
+                if spec in content:
+                    specialties.add(spec)
+        if specialties:
+            insights.append(f"Specialties visited: {', '.join(specialties)}")
+
+        # Follow-up compliance
+        if follow_ups:
+            insights.append(f"Follow-up records: {len(follow_ups)}")
+
+        if not insights:
+            insights.append("No specific patterns identified yet.")
+
+        return insights
+
+    def _generate_summary_text(self, patient_uuid, all_interactions, appointments,
+                                symptoms, follow_ups, key_insights) -> str:
+        """Generate human-readable summary text."""
+        if not all_interactions:
+            return f"No interactions found for patient {patient_uuid[:8]}."
+
+        parts = [f"Patient {patient_uuid[:8]} - Medical Summary"]
+        parts.append(f"Total interactions: {len(all_interactions)}")
+
+        if appointments:
+            parts.append(f"Appointments: {len(appointments)}")
+        if symptoms:
+            parts.append(f"Symptom reports: {len(symptoms)}")
+        if follow_ups:
+            parts.append(f"Follow-ups: {len(follow_ups)}")
+
+        # Most recent interaction
+        most_recent = all_interactions[0]  # Already sorted newest first
+        parts.append(
+            f"Most recent: {most_recent['metadata']['type']} - "
+            f"{most_recent['metadata']['content'][:100]}"
+        )
+
+        # Key insights
+        if key_insights:
+            parts.append("Key insights:")
+            for insight in key_insights:
+                parts.append(f"  - {insight}")
+
+        return "\n".join(parts)
+
+
+# Global instances
 worker_agent = WorkerAgent()

@@ -42,8 +42,12 @@ function updatePrivacyVisualization(workflowSteps, privacyDetails = null) {
     if (privacyDetails) {
         addPrivacyIndicator(privacySteps, privacyDetails);
         
-        // Add PII transformation if detected
-        if (privacyDetails.pii_detected) {
+        // Add PII transformations if available (from privacy_report format)
+        if (privacyDetails.transformations && privacyDetails.transformations.length > 0) {
+            addPIITransformations(privacySteps, privacyDetails);
+        }
+        // Legacy format support
+        else if (privacyDetails.pii_detected) {
             addPIITransformation(privacySteps, privacyDetails);
         }
     }
@@ -67,6 +71,37 @@ function addPrivacyIndicator(container, privacyDetails) {
     `;
     
     container.appendChild(indicatorDiv);
+}
+
+function addPIITransformations(container, privacyDetails) {
+    const transformDiv = document.createElement('div');
+    transformDiv.className = 'privacy-transformation';
+    
+    let html = '<h4>🔐 PII Transformations</h4><div class="transformation-flow">';
+    
+    privacyDetails.transformations.forEach(transform => {
+        const fieldName = transform.field || transform.pii_type || 'Field';
+        const original = transform.original || '?';
+        const transformed = transform.transformed || '?';
+        const method = transform.method || transform.action || 'Anonymized';
+        
+        html += `
+            <div class="transformation-item">
+                <div class="original-pii">${escapeHtml(fieldName)}: ${escapeHtml(original)}</div>
+                <div class="arrow">→</div>
+                <div class="pseudonymized">${escapeHtml(transformed)}</div>
+                <div class="method-tag">(${escapeHtml(method)})</div>
+            </div>
+        `;
+    });
+    
+    if (privacyDetails.pii_removed > 0) {
+        html += `<div class="pii-count">🛡️ ${privacyDetails.pii_removed} PII field(s) protected</div>`;
+    }
+    
+    html += '</div>';
+    transformDiv.innerHTML = html;
+    container.appendChild(transformDiv);
 }
 
 function addPIITransformation(container, privacyDetails) {

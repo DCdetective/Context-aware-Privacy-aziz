@@ -460,8 +460,31 @@ body {
 }
 
 .pseudonymized {
-  color: var(--text-primary);
+  color: #10a37f;
+  font-weight: 600;
 }
+
+.method-tag {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding-left: 4px;
+}
+
+.pii-count {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(16, 163, 127, 0.1);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #10a37f;
+  font-weight: 500;
+}
+
+.urgency-routine { color: #10b981; }
+.urgency-urgent { color: #f59e0b; }
+.urgency-emergency { color: #ef4444; }
 
 .timeline {
   display: flex;

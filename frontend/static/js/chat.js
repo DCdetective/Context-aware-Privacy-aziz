@@ -75,13 +75,17 @@ async function handleSendMessage() {
         // Hide typing indicator
         hideTypingIndicator();
 
-        if (data.success) {
+        if (response.ok && data.success !== false) {
             // Add bot response
             addBotMessage(data);
         } else {
+            // Handle error responses (including 400, 422, 500)
+            const errorMsg = data.message || data.detail || 'Sorry, I encountered an error. Please try again.';
             addBotMessage({
-                message: data.message || 'Sorry, I encountered an error. Please try again.',
-                intent: 'error'
+                message: errorMsg,
+                intent: 'error',
+                result: {},
+                workflow_steps: []
             });
         }
 
@@ -158,7 +162,12 @@ function addBotMessage(data) {
         displayDisambiguation(data.result.disambiguation_data, messageDiv);
     }
     
-    // Handle confirmation
+    // Handle confirmation required (new patient creation)
+    if (data.intent === 'confirmation_required') {
+        displayConfirmationButtons(messageDiv);
+    }
+    
+    // Handle confirmation summary (appointment booking etc.)
     if (data.intent === 'awaiting_confirmation' && data.message.toLowerCase().includes('confirm')) {
         displayConfirmationSummary(data.message, messageDiv);
     }
@@ -174,19 +183,33 @@ function addBotMessage(data) {
 
     // Update privacy visualization with details
     if (window.updatePrivacyVisualization && data.workflow_steps) {
+        // Use privacy_details from result (which comes from privacy_report)
         const privacyDetails = data.result?.privacy_details || null;
         window.updatePrivacyVisualization(data.workflow_steps, privacyDetails);
+        
+        // Auto-open sidebar when there are privacy transformations
+        if (privacyDetails && privacyDetails.transformations && privacyDetails.transformations.length > 0) {
+            const sidebar = document.getElementById('privacySidebar');
+            const showBtn = document.getElementById('showPrivacyButton');
+            if (sidebar && sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                if (showBtn) showBtn.style.display = 'none';
+            }
+        }
     }
 }
 
 function formatResultCard(intent, result) {
+    // Get patient name from result (coordinator always sets it now)
+    const patientName = result.patient_name || 'N/A';
+    
     if (intent === 'appointment') {
         return `
             <div class="result-card">
                 <h4>Appointment Details</h4>
                 <div class="result-detail">
                     <span class="result-label">Patient</span>
-                    <span class="result-value">${escapeHtml(result.patient_name || 'N/A')}</span>
+                    <span class="result-value">${escapeHtml(patientName)}</span>
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Time</span>
@@ -194,11 +217,11 @@ function formatResultCard(intent, result) {
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Duration</span>
-                    <span class="result-value">${result.consultation_duration} minutes</span>
+                    <span class="result-value">${result.consultation_duration || 30} minutes</span>
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Urgency</span>
-                    <span class="result-value urgency-${result.urgency_level}">${capitalizeFirst(result.urgency_level)}</span>
+                    <span class="result-value urgency-${result.urgency_level || 'routine'}">${capitalizeFirst(result.urgency_level || 'routine')}</span>
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Specialty</span>
@@ -212,7 +235,7 @@ function formatResultCard(intent, result) {
                 <h4>Follow-up Details</h4>
                 <div class="result-detail">
                     <span class="result-label">Patient</span>
-                    <span class="result-value">${escapeHtml(result.patient_name || 'N/A')}</span>
+                    <span class="result-value">${escapeHtml(patientName)}</span>
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Time</span>
@@ -220,7 +243,7 @@ function formatResultCard(intent, result) {
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Previous Visits</span>
-                    <span class="result-value">${result.previous_visits}</span>
+                    <span class="result-value">${result.previous_visits || 0}</span>
                 </div>
             </div>
         `;
@@ -230,7 +253,7 @@ function formatResultCard(intent, result) {
                 <h4>Medical Summary</h4>
                 <div class="result-detail">
                     <span class="result-label">Patient</span>
-                    <span class="result-value">${escapeHtml(result.patient_name || 'N/A')}</span>
+                    <span class="result-value">${escapeHtml(patientName)}</span>
                 </div>
                 <div class="result-detail">
                     <span class="result-label">Total Visits</span>
@@ -469,6 +492,39 @@ function displayConfirmationSummary(message, messageDiv) {
     confirmPanel.appendChild(buttonContainer);
     
     messageDiv.querySelector('.bubble').appendChild(confirmPanel);
+}
+
+/**
+ * Display Yes/No confirmation buttons (for new patient creation etc.)
+ */
+function displayConfirmationButtons(messageDiv) {
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'confirmation-buttons';
+    buttonContainer.style.marginTop = '12px';
+    
+    const yesBtn = document.createElement('button');
+    yesBtn.className = 'confirm-btn';
+    yesBtn.textContent = '✓ Yes, create patient';
+    yesBtn.onclick = () => {
+        // Disable buttons after click
+        yesBtn.disabled = true;
+        noBtn.disabled = true;
+        sendConfirmation('yes');
+    };
+    
+    const noBtn = document.createElement('button');
+    noBtn.className = 'cancel-btn';
+    noBtn.textContent = '✗ No, cancel';
+    noBtn.onclick = () => {
+        yesBtn.disabled = true;
+        noBtn.disabled = true;
+        sendConfirmation('no');
+    };
+    
+    buttonContainer.appendChild(yesBtn);
+    buttonContainer.appendChild(noBtn);
+    
+    messageDiv.querySelector('.bubble').appendChild(buttonContainer);
 }
 
 /**

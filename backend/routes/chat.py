@@ -24,6 +24,7 @@ class ChatResponse(BaseModel):
     intent: str
     patient_uuid: Optional[str] = None
     patient_name: Optional[str] = None
+    session_id: Optional[str] = None
     result: Dict[str, Any]
     privacy_safe: bool
     workflow_steps: List[str]
@@ -48,7 +49,11 @@ async def send_message(chat_message: ChatMessage):
         
         # Format privacy details for frontend
         privacy_report = result.get('privacy_report')
-        privacy_details = None
+        privacy_details = {
+            "transformations": [],
+            "pii_removed": 0,
+            "cloud_safe": True
+        }
         
         if privacy_report:
             privacy_details = {
@@ -64,9 +69,11 @@ async def send_message(chat_message: ChatMessage):
             intent=result.get("intent", "general"),
             patient_uuid=result.get("patient_uuid"),
             patient_name=result.get("patient_name"),
+            session_id=result.get("session_id"),
             result={
                 **result.get("result", {}),
-                "privacy_details": privacy_details
+                "privacy_details": privacy_details,
+                "patient_name": result.get("patient_name"),
             },
             privacy_safe=result.get("privacy_safe", True),
             workflow_steps=result.get("workflow_steps", [])
@@ -76,7 +83,7 @@ async def send_message(chat_message: ChatMessage):
         if result.get("disambiguation_data"):
             response.result["disambiguation_data"] = result["disambiguation_data"]
         
-        # Add session ID
+        # Add session ID to result too
         if result.get("session_id"):
             response.result["session_id"] = result["session_id"]
         

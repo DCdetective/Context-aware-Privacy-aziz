@@ -1,297 +1,345 @@
 """
-Tests for Human-in-the-Loop (HITL) Workflow
+Tests for Human-in-the-Loop (HITL) Manager (Prompt 9).
+Tests confirmation requests, positive/negative confirmations,
+clarification, multiple rounds, invalid responses, state preservation,
+no-reset mid-workflow, timeout warning, and timeout cancellation.
 """
+
 import pytest
-from agents.hitl_manager import hitl_manager
-from agents.coordinator import coordinator
-from agents.session_manager import session_manager
+import asyncio
+import tempfile
+import os
+import time
+
+from agents.hitl_manager import HITLManager
+from agents.coordinator import Coordinator
+from agents.session_manager import SessionManager
+from agents.context_agent import ContextAgent
+from database.identity_vault import IdentityVault
 
 
-def test_generate_medical_questions():
-    """Test medical question generation."""
-    questions = hitl_manager.generate_medical_questions(
-        intent='appointment',
-        semantic_context={
-            'symptom_category': 'respiratory',
-            'urgency_level': 'urgent'
-        }
-    )
-    
-    assert len(questions) >= 2
-    assert len(questions) <= 3
-    assert all(isinstance(q, str) for q in questions)
-    assert all(len(q) > 0 for q in questions)
+@pytest.fixture
+def temp_db():
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        session_db = f.name
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        vault_db = f.name
+    yield session_db, vault_db
+    for p in (session_db, vault_db):
+        try:
+            os.remove(p)
+        except (PermissionError, OSError):
+            pass
 
 
-def test_generate_medical_questions_cardiac():
-    """Test medical question generation for cardiac category."""
-    questions = hitl_manager.generate_medical_questions(
-        intent='appointment',
-        semantic_context={
-            'symptom_category': 'cardiac',
-            'urgency_level': 'routine'
-        }
-    )
-    
-    assert len(questions) >= 2
-    assert len(questions) <= 3
-    # Check for cardiac-specific questions
-    assert any('chest' in q.lower() or 'heart' in q.lower() for q in questions)
+@pytest.fixture
+def session_mgr(temp_db):
+    session_db, _ = temp_db
+    return SessionManager(db_path=session_db)
 
 
-def test_generate_medical_questions_general():
-    """Test medical question generation for general category."""
-    questions = hitl_manager.generate_medical_questions(
-        intent='followup',
-        semantic_context={
-            'symptom_category': 'general',
-            'urgency_level': 'routine'
-        }
-    )
-    
-    assert len(questions) >= 2
-    assert len(questions) <= 3
+@pytest.fixture
+def hitl(session_mgr):
+    mgr = HITLManager(session_manager=session_mgr)
+    return mgr
 
 
-def test_confirmation_parsing():
-    """Test confirmation response parsing."""
-    # Positive confirmations
-    assert hitl_manager.parse_confirmation_response("yes") is True
-    assert hitl_manager.parse_confirmation_response("Yes, confirm") is True
-    assert hitl_manager.parse_confirmation_response("ok proceed") is True
-    assert hitl_manager.parse_confirmation_response("sure") is True
-    assert hitl_manager.parse_confirmation_response("yeah") is True
-    assert hitl_manager.parse_confirmation_response("yep") is True
-    assert hitl_manager.parse_confirmation_response("correct") is True
-    
-    # Negative confirmations
-    assert hitl_manager.parse_confirmation_response("no") is False
-    assert hitl_manager.parse_confirmation_response("cancel") is False
-    assert hitl_manager.parse_confirmation_response("nevermind") is False
-    assert hitl_manager.parse_confirmation_response("nope") is False
-    assert hitl_manager.parse_confirmation_response("stop") is False
+@pytest.fixture
+def coordinator(temp_db):
+    session_db, vault_db = temp_db
+    coord = Coordinator()
+    coord.session_manager = SessionManager(db_path=session_db)
+    v = IdentityVault(db_path=vault_db)
+    v.pseudonymize_patient("Aziz", age=22, gender="Male", component="test")
+    v.pseudonymize_patient("Sara", age=28, gender="Female", component="test")
+    coord._get_identity_vault = lambda: v
+    ca = ContextAgent()
+    coord._get_context_agent = lambda: ca
+    coord._ctx_agent = ca
+    return coord
 
 
-def test_confirmation_summary_appointment():
-    """Test confirmation summary generation for appointments."""
-    summary = hitl_manager.create_confirmation_summary(
-        intent='appointment',
-        patient_name='John Doe',
-        action_data={
-            'recommended_doctor': 'Dr. Smith',
-            'appointment_date': '2024-02-15',
-            'appointment_time': '10:00 AM',
-            'consultation_duration': 30
-        },
-        user_responses=[
-            {'question': 'How long have you been experiencing these symptoms?', 'response': '2 days'},
-            {'question': 'Do you have difficulty breathing?', 'response': 'Sometimes'}
-        ]
-    )
-    
-    assert 'John Doe' in summary
-    assert 'Dr. Smith' in summary
-    assert '2024-02-15' in summary
-    assert '10:00 AM' in summary
-    assert '30 minutes' in summary
-    assert '2 days' in summary
-    assert 'Sometimes' in summary
-    assert 'yes' in summary.lower() or 'confirm' in summary.lower()
+def run(coro):
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 
-def test_confirmation_summary_followup():
-    """Test confirmation summary generation for followups."""
-    summary = hitl_manager.create_confirmation_summary(
-        intent='followup',
-        patient_name='Jane Smith',
-        action_data={
-            'followup_date': '2024-03-01',
-            'recommended_doctor': 'Dr. Johnson'
-        },
-        user_responses=[
-            {'question': 'How are you feeling?', 'response': 'Better'}
-        ]
-    )
-    
-    assert 'Jane Smith' in summary
-    assert '2024-03-01' in summary
-    assert 'Dr. Johnson' in summary
-    assert 'Better' in summary
+# ── 1. Test Confirmation Request ─────────────────────────────────────
+
+class TestConfirmationRequest:
+    def test_workflow_pauses(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        result = hitl.request_confirmation(sid, "appointment", {
+            "patient_name": "Aziz",
+            "specialty": "cardiology",
+            "date": "2026-03-01",
+            "time": "14:00",
+        })
+        assert result["requires_response"] is True
+        assert "confirm" in result["message"].lower()
+        assert hitl.is_waiting_for_hitl(sid) is True
+
+        # Pending question should be set
+        pending = hitl.get_pending_request(sid)
+        assert pending is not None
+        assert pending["question_type"] == "confirmation"
 
 
-def test_hitl_appointment_workflow():
-    """Test complete HITL workflow for appointment."""
-    # Clear any existing sessions
-    session_manager.clear_all_sessions()
-    
-    session_id = session_manager.create_session()
-    
-    # Step 1: Initiate appointment
-    response1 = coordinator.process_message(
-        "Book appointment for John Doe, age 30, fever",
-        session_id=session_id
-    )
-    
-    # Should ask first question
-    assert response1['success'] is True
-    assert "question" in response1['message'].lower() or "?" in response1['message']
-    assert response1['intent'] == 'appointment_initiated'
-    
-    # Step 2: Check pending action exists
-    pending = session_manager.get_pending_action(session_id)
-    assert pending is not None
-    assert pending['action_type'] == 'appointment'
-    assert 'questions_asked' in pending
-    
-    # Answer all questions
-    questions = pending.get('questions_asked', [])
-    assert len(questions) >= 2
-    
-    for i in range(len(questions) - 1):
-        response = coordinator.process_message(
-            f"Test answer {i+1}",
-            session_id=session_id
+# ── 2. Test Positive Confirmation ────────────────────────────────────
+
+class TestPositiveConfirmation:
+    def test_confirm_proceeds(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {
+            "patient_name": "Aziz", "specialty": "cardiology"
+        })
+
+        result = hitl.process_hitl_response(sid, "confirm")
+        assert result["action"] == "confirmed"
+        assert result["proceed"] is True
+        # Pending should be cleared
+        assert hitl.is_waiting_for_hitl(sid) is False
+
+    def test_yes_proceeds(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "update", {"status": "better"})
+        result = hitl.process_hitl_response(sid, "yes")
+        assert result["action"] == "confirmed"
+        assert result["proceed"] is True
+
+    def test_ok_proceeds(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "action", {"desc": "test"})
+        result = hitl.process_hitl_response(sid, "ok")
+        assert result["action"] == "confirmed"
+        assert result["proceed"] is True
+
+
+# ── 3. Test Negative Confirmation ────────────────────────────────────
+
+class TestNegativeConfirmation:
+    def test_cancel_aborts(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"patient_name": "Aziz"})
+
+        result = hitl.process_hitl_response(sid, "cancel")
+        assert result["action"] == "cancelled"
+        assert result["proceed"] is False
+        assert hitl.is_waiting_for_hitl(sid) is False
+
+    def test_no_aborts(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"patient_name": "Aziz"})
+        result = hitl.process_hitl_response(sid, "no")
+        assert result["action"] == "cancelled"
+        assert result["proceed"] is False
+
+
+# ── 4. Test Clarification Question ───────────────────────────────────
+
+class TestClarificationQuestion:
+    def test_clarification_with_options(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        result = hitl.request_clarification(
+            sid,
+            "Multiple patients found named 'Aziz':",
+            {"candidates": [{"id": "a1"}, {"id": "a2"}]},
+            options=["Aziz (Age: early 20s)", "Aziz (Age: middle-aged)"]
         )
-        assert response['success'] is True
-    
-    # Answer last question - should get confirmation summary
-    response_confirm = coordinator.process_message(
-        "Test answer final",
-        session_id=session_id
-    )
-    
-    assert response_confirm['success'] is True
-    assert "confirm" in response_confirm['message'].lower()
-    assert response_confirm['intent'] == 'awaiting_confirmation'
-    
-    # Step 3: Confirm
-    response_final = coordinator.process_message(
-        "yes, confirm",
-        session_id=session_id
-    )
-    
-    assert response_final['success'] is True
-    assert "booked" in response_final['message'].lower() or "scheduled" in response_final['message'].lower()
-    assert response_final['intent'] == 'appointment_confirmed'
-    
-    # Verify pending action is cleared
-    pending_after = session_manager.get_pending_action(session_id)
-    assert pending_after is None
+        assert result["requires_response"] is True
+        assert hitl.is_waiting_for_hitl(sid) is True
+        assert result["options"] is not None
+        assert len(result["options"]) == 2
+
+    def test_select_option_by_number(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_clarification(
+            sid, "Select patient:",
+            {},
+            options=["Patient A", "Patient B"]
+        )
+        result = hitl.process_hitl_response(sid, "1")
+        assert result["action"] == "answered"
+        assert result["proceed"] is True
+        assert result["data"]["selected_option"] == "Patient A"
+
+    def test_select_option_by_number_second(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_clarification(
+            sid, "Select:",
+            {},
+            options=["Option A", "Option B", "Option C"]
+        )
+        result = hitl.process_hitl_response(sid, "2")
+        assert result["action"] == "answered"
+        assert result["data"]["selected_option"] == "Option B"
 
 
-def test_hitl_followup_workflow():
-    """Test HITL workflow using session manager directly (bypassing gatekeeper inconsistency)."""
-    session_manager.clear_all_sessions()
-    session_id = session_manager.create_session()
-    
-    # Simulate that patient identity is already resolved
-    session_manager.set_active_patient(session_id, "test-uuid-123", "Jane Smith")
-    
-    # Set up a pending action with questions (simulating HITL initiation)
-    questions = ["How long have you been experiencing symptoms?", "Rate your pain 1-10?"]
-    session_manager.set_pending_action(
-        session_id=session_id,
-        action_type='followup',
-        action_data={'followup_date': '2024-02-20', 'recommended_doctor': 'Dr. Test'},
-        questions_asked=questions
-    )
-    
-    # Update with patient UUID
-    pending = session_manager.get_pending_action(session_id)
-    pending['patient_uuid'] = "test-uuid-123"
-    
-    # Simulate answering questions via coordinator
-    for i in range(len(questions)):
-        response = coordinator.process_message(f"Answer {i+1}", session_id=session_id)
-        assert response['success'] is True
-    
-    # Should now be at confirmation stage
-    assert "confirm" in response['message'].lower()
-    
-    # Confirm the action
-    response_final = coordinator.process_message("yes", session_id=session_id)
-    assert response_final['success'] is True
-    assert 'confirmed' in response_final['intent']
+# ── 5. Test Multiple HITL Rounds ─────────────────────────────────────
+
+class TestMultipleRounds:
+    def test_sequential_hitl(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+
+        # Round 1: Clarification
+        hitl.request_clarification(sid, "Which patient?", {}, options=["A", "B"])
+        r1 = hitl.process_hitl_response(sid, "1")
+        assert r1["action"] == "answered"
+        assert r1["proceed"] is True
+
+        # Round 2: Another clarification
+        hitl.request_clarification(sid, "Which specialty?", {}, options=["Cardiology", "Neurology"])
+        r2 = hitl.process_hitl_response(sid, "2")
+        assert r2["action"] == "answered"
+        assert r2["data"]["selected_option"] == "Neurology"
+
+        # Round 3: Confirmation
+        hitl.request_confirmation(sid, "appointment", {"specialty": "neurology"})
+        r3 = hitl.process_hitl_response(sid, "confirm")
+        assert r3["action"] == "confirmed"
+        assert r3["proceed"] is True
 
 
-def test_hitl_cancel_workflow():
-    """Test HITL workflow cancellation using session manager directly."""
-    session_manager.clear_all_sessions()
-    session_id = session_manager.create_session()
-    
-    # Simulate that patient identity is already resolved
-    session_manager.set_active_patient(session_id, "test-uuid-456", "Bob Johnson")
-    
-    # Set up a pending action with questions
-    questions = ["How severe is the headache?", "When did it start?"]
-    session_manager.set_pending_action(
-        session_id=session_id,
-        action_type='appointment',
-        action_data={'appointment_date': '2024-02-25', 'recommended_doctor': 'Dr. Smith'},
-        questions_asked=questions
-    )
-    
-    # Update with patient UUID
-    pending = session_manager.get_pending_action(session_id)
-    pending['patient_uuid'] = "test-uuid-456"
-    
-    # Answer all questions
-    for i in range(len(questions)):
-        response = coordinator.process_message(f"Answer {i+1}", session_id=session_id)
-        assert response['success'] is True
-    
-    # Should be at confirmation stage
-    assert "confirm" in response['message'].lower()
-    
-    # Cancel instead of confirming
-    response_cancel = coordinator.process_message("no, cancel", session_id=session_id)
-    
-    assert response_cancel['success'] is True
-    assert response_cancel['intent'] == 'cancelled'
-    assert "cancel" in response_cancel['message'].lower()
-    
-    # Verify pending action is cleared
-    pending_after = session_manager.get_pending_action(session_id)
-    assert pending_after is None
+# ── 6. Test Invalid Responses ────────────────────────────────────────
+
+class TestInvalidResponses:
+    def test_invalid_reprompts(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"patient_name": "Aziz"})
+
+        result = hitl.process_hitl_response(sid, "maybe")
+        assert result["action"] == "invalid"
+        assert result["proceed"] is False
+        # Should still be waiting
+        assert hitl.is_waiting_for_hitl(sid) is True
+
+    def test_valid_after_invalid(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"test": True})
+
+        # Invalid
+        r1 = hitl.process_hitl_response(sid, "maybe")
+        assert r1["action"] == "invalid"
+        assert hitl.is_waiting_for_hitl(sid) is True
+
+        # Now valid
+        r2 = hitl.process_hitl_response(sid, "confirm")
+        assert r2["action"] == "confirmed"
+        assert r2["proceed"] is True
+        assert hitl.is_waiting_for_hitl(sid) is False
 
 
-def test_session_manager_pending_action():
-    """Test session manager pending action methods."""
-    session_manager.clear_all_sessions()
-    session_id = session_manager.create_session()
-    
-    # Set pending action
-    session_manager.set_pending_action(
-        session_id=session_id,
-        action_type='appointment',
-        action_data={'doctor': 'Dr. Test'},
-        questions_asked=['Q1', 'Q2']
-    )
-    
-    # Get pending action
-    pending = session_manager.get_pending_action(session_id)
-    assert pending is not None
-    assert pending['action_type'] == 'appointment'
-    assert pending['action_data']['doctor'] == 'Dr. Test'
-    assert len(pending['questions_asked']) == 2
-    
-    # Add question response
-    session_manager.add_question_response(
-        session_id=session_id,
-        question='Q1',
-        response='Answer 1'
-    )
-    
-    pending = session_manager.get_pending_action(session_id)
-    assert len(pending['user_responses']) == 1
-    assert pending['user_responses'][0]['question'] == 'Q1'
-    assert pending['user_responses'][0]['response'] == 'Answer 1'
-    
-    # Clear pending action
-    session_manager.clear_pending_action(session_id)
-    pending = session_manager.get_pending_action(session_id)
-    assert pending is None
+# ── 7. Test State Preservation ───────────────────────────────────────
+
+class TestStatePreservation:
+    def test_info_preserved_during_hitl(self, coordinator):
+        sid = coordinator.session_manager.create_session()
+
+        # Start appointment workflow
+        r1 = run(coordinator.process_message(sid, "Book appointment for Aziz"))
+        assert r1["success"]
+
+        # Provide specialty
+        r2 = run(coordinator.process_message(sid, "Cardiology"))
+        session = coordinator.session_manager.get_session(sid)
+        wf_data = coordinator.session_manager.get_workflow_data(sid)
+        assert wf_data.get("specialty") == "cardiology"
+        assert session["active_workflow"] == "appointment"
+
+        # Provide date
+        r3 = run(coordinator.process_message(sid, "Tomorrow"))
+        wf_data = coordinator.session_manager.get_workflow_data(sid)
+        assert "date" in wf_data
+
+        # Provide time
+        r4 = run(coordinator.process_message(sid, "2 PM"))
+        wf_data = coordinator.session_manager.get_workflow_data(sid)
+        assert wf_data.get("time") == "14:00"
+
+        # Provide reason - triggers confirmation (HITL pause)
+        r5 = run(coordinator.process_message(sid, "Chest pain"))
+        assert "confirm" in r5["response"].lower()
+
+        # All collected info should still be there
+        wf_data = coordinator.session_manager.get_workflow_data(sid)
+        assert wf_data.get("specialty") == "cardiology"
+        assert "date" in wf_data
+        assert wf_data.get("time") == "14:00"
+        assert wf_data.get("reason") == "Chest pain"
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+# ── 8. Test No Reset Mid-Workflow ────────────────────────────────────
+
+class TestNoResetMidWorkflow:
+    def test_no_main_menu_during_workflow(self, coordinator):
+        sid = coordinator.session_manager.create_session()
+
+        # Start workflow
+        r1 = run(coordinator.process_message(sid, "Book appointment for Aziz"))
+
+        # During workflow, workflow should be active
+        session = coordinator.session_manager.get_session(sid)
+        assert session["active_workflow"] == "appointment"
+
+        # Send another message - should NOT reset to main menu
+        r2 = run(coordinator.process_message(sid, "Cardiology"))
+        session = coordinator.session_manager.get_session(sid)
+        assert session["active_workflow"] == "appointment"
+        assert "what would you like to do" not in r2["response"].lower()
+
+        # Intent detection should only have been called once
+        detection_count = coordinator.get_intent_detection_count(sid)
+        assert detection_count == 1
+
+
+# ── 9. Test Timeout Warning ──────────────────────────────────────────
+
+class TestTimeoutWarning:
+    def test_reminder_sent(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"patient_name": "Aziz"})
+
+        # Simulate 2+ minutes elapsed
+        pending = hitl._pending_requests[sid]
+        pending["timestamp"] = time.time() - 130  # 130 seconds ago
+
+        result = hitl.check_timeout(sid)
+        assert result["status"] == "reminder"
+        assert result["message"] is not None
+        assert "reminder" in result["message"].lower() or "respond" in result["message"].lower()
+
+        # Workflow should still be active
+        assert hitl.is_waiting_for_hitl(sid) is True
+
+
+# ── 10. Test Timeout Cancellation ────────────────────────────────────
+
+class TestTimeoutCancellation:
+    def test_timeout_cancels(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"patient_name": "Aziz"})
+
+        # Simulate 5+ minutes elapsed
+        pending = hitl._pending_requests[sid]
+        pending["timestamp"] = time.time() - 310  # 310 seconds ago
+
+        result = hitl.check_timeout(sid)
+        assert result["status"] == "timed_out"
+        assert result["message"] is not None
+        assert "timed out" in result["message"].lower() or "cancelled" in result["message"].lower()
+
+        # Should no longer be waiting
+        assert hitl.is_waiting_for_hitl(sid) is False
+
+    def test_timeout_logged(self, hitl, session_mgr):
+        sid = session_mgr.create_session()
+        hitl.request_confirmation(sid, "appointment", {"test": True})
+
+        pending = hitl._pending_requests[sid]
+        pending["timestamp"] = time.time() - 310
+
+        hitl.check_timeout(sid)
+
+        # Check log
+        log = hitl.get_hitl_log(sid)
+        event_types = [e["event_type"] for e in log]
+        assert "timeout" in event_types
