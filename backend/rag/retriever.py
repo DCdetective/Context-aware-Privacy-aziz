@@ -78,10 +78,11 @@ class RAGRetriever:
         
         # 3. Search medical knowledge
         relevant_knowledge = []
+        search_query = medical_info or specialty or "general medical query"
         if synthetic_store:
             logger.info(f"Searching medical knowledge...")
             relevant_knowledge = synthetic_store.search_medical_knowledge(
-                query=medical_info,
+                query=search_query,
                 top_k=3
             )
             logger.info(f"✓ Found {len(relevant_knowledge)} knowledge items")
@@ -91,7 +92,7 @@ class RAGRetriever:
         if synthetic_store:
             logger.info(f"Searching similar cases...")
             similar_cases = synthetic_store.search_similar_cases(
-                query=medical_info,
+                query=search_query,
                 top_k=2
             )
             logger.info(f"✓ Found {len(similar_cases)} similar cases")

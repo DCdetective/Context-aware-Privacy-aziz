@@ -318,6 +318,10 @@ class ContextAgent:
         logger.info(f"Intent: {intent}")
         logger.info("=" * 60)
 
+        # Guard against None medical_info
+        if not medical_info:
+            medical_info = semantic_context.get('symptom_category', 'general medical query') or 'general medical query'
+
         # Step 1: Retrieve relevant context via RAG
         rag_context = rag_retriever.retrieve_context_for_intent(
             patient_uuid=patient_uuid,

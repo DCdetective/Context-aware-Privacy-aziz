@@ -1,6 +1,7 @@
 // MedShield Chat - Premium ChatGPT-like Interface
 
 let chatHistory = [];
+let currentSessionId = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     const chatForm = document.getElementById('chatForm');
@@ -60,17 +61,27 @@ async function handleSendMessage() {
 
     try {
         // Send to API
+        const payload = { message: message };
+        if (currentSessionId) {
+            payload.session_id = currentSessionId;
+        }
+
         const response = await fetch('/api/chat/message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                message: message
-            })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
+
+        // Track session ID from response for multi-turn conversations
+        if (data.session_id) {
+            currentSessionId = data.session_id;
+        } else if (data.result && data.result.session_id) {
+            currentSessionId = data.result.session_id;
+        }
 
         // Hide typing indicator
         hideTypingIndicator();

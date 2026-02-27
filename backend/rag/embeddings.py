@@ -62,6 +62,10 @@ class EmbeddingGenerator:
         Returns:
             Embedding vector as list of floats
         """
+        # Guard against None or empty text
+        if text is None or (isinstance(text, str) and text.strip() == ""):
+            text = "general medical query"
+
         # Check cache
         if text in self._cache:
             return self._cache[text]
@@ -89,6 +93,9 @@ class EmbeddingGenerator:
         Returns:
             List of embedding vectors
         """
+        # Guard against None entries in the list
+        texts = [t if (t is not None and isinstance(t, str) and t.strip() != "") else "general medical query" for t in texts]
+
         if self.model is not None:
             # Check which texts are cached
             uncached_indices = []

@@ -641,7 +641,7 @@ class AgentCoordinator:
                     gender = pending.get("gender")
                     original_intent = pending.get("intent", "general")
                     original_semantic_context = pending.get("semantic_context", {})
-                    original_medical_info = pending.get("medical_info", "")
+                    original_medical_info = pending.get("medical_info") or ""
 
                     patient_uuid = identity_vault.confirm_new_patient(
                         patient_name=patient_name, age=age, gender=gender,
@@ -771,7 +771,7 @@ class AgentCoordinator:
                         "gender": pii_data.get('gender'),
                         "intent": intent,
                         "semantic_context": semantic_context,
-                        "medical_info": pii_data.get('medical_info', ''),
+                        "medical_info": pii_data.get('medical_info') or '',
                     }
                     return {"success": True, "message": resolution["message"],
                             "intent": "confirmation_required", "session_id": session_id,
@@ -837,7 +837,7 @@ class AgentCoordinator:
             refined_context = context_agent.refine_context(
                 patient_uuid=patient_uuid, intent=intent,
                 semantic_context=semantic_context,
-                medical_info=pii_data.get('medical_info', ''))
+                medical_info=pii_data.get('medical_info') or '')
 
             # Add patient history to context
             if patient_history_summary:

@@ -406,6 +406,9 @@ Return ONLY valid JSON, no additional text."""
             pii_data.setdefault('age', None)
             pii_data.setdefault('gender', None)
             pii_data.setdefault('medical_info', user_message)
+            # Ensure medical_info is never None
+            if pii_data.get('medical_info') is None:
+                pii_data['medical_info'] = user_message
             return pii_data
         except Exception:
             return {'patient_name': None, 'age': None, 'gender': None, 'medical_info': user_message}
@@ -587,6 +590,9 @@ Return ONLY valid JSON."""
         pii_data.setdefault('age', None)
         pii_data.setdefault('gender', None)
         pii_data.setdefault('medical_info', user_message)
+        # Ensure medical_info is never None
+        if pii_data.get('medical_info') is None:
+            pii_data['medical_info'] = user_message
 
         privacy_report = None
         if pii_data.get('patient_name'):
