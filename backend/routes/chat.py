@@ -5,6 +5,7 @@ import logging
 
 from agents.coordinator import coordinator
 from database.identity_vault import identity_vault
+from mcp.bridge import mcp_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +47,31 @@ async def send_message(chat_message: ChatMessage):
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("message", "Processing failed"))
         
-        # Format privacy details for frontend
+        # Format privacy details for frontend visualization
         privacy_report = result.get('privacy_report')
         privacy_details = None
-        
+
         if privacy_report:
+            transformations = privacy_report.get('transformations', [])
+
+            # Build original_contains from transformation data for frontend
+            original_contains = {"name": None, "age": None, "gender": None}
+            for t in transformations:
+                field = t.get("field", "").lower()
+                if "name" in field:
+                    original_contains["name"] = t.get("original")
+                elif "age" in field:
+                    original_contains["age"] = t.get("original")
+                elif "gender" in field:
+                    original_contains["gender"] = t.get("original")
+
             privacy_details = {
-                "transformations": privacy_report.get('transformations', []),
+                "transformations": transformations,
+                "pii_detected": privacy_report.get('pii_removed', 0) > 0,
                 "pii_removed": privacy_report.get('pii_removed', 0),
-                "cloud_safe": privacy_report.get('cloud_safe', True)
+                "cloud_safe": privacy_report.get('cloud_safe', True),
+                "original_contains": original_contains,
+                "pseudonymized_to": result.get("patient_uuid"),
             }
         
         # Format response
@@ -103,10 +120,14 @@ async def get_privacy_report():
     try:
         # Get compliance report from identity vault
         report = identity_vault.verify_privacy_compliance()
-        
+
+        # Get MCP bridge compliance report
+        mcp_report = mcp_bridge.get_compliance_report()
+
         return {
             "success": True,
             "report": report,
+            "mcp_bridge": mcp_report,
             "message": "Privacy compliance verified" if report["privacy_compliant"] else "Privacy violations detected"
         }
         

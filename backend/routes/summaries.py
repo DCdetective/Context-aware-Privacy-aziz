@@ -6,6 +6,7 @@ import logging
 from agents.gatekeeper import gatekeeper_agent
 from agents.coordinator import CoordinatorAgent
 from agents.worker import worker_agent
+from mcp.bridge import mcp_bridge
 
 # Deterministic planner for API routes (avoids external LLM calls during tests)
 _coordinator = CoordinatorAgent()
@@ -69,13 +70,29 @@ async def generate_summary(request: SummaryRequest):
         if coord_result.get("success") is False:
             raise HTTPException(status_code=400, detail=coord_result.get("error", "Coordination failed"))
         
-        # Step 4: Worker execution
-        logger.info("Step 4: Invoking Worker for summary generation...")
+        # Step 4: Worker execution (via MCP Bridge)
+        logger.info("Step 4: MCP Bridge validating -> Worker execution...")
+        mcp_bridge.route_to_cloud(
+            agent_name="worker_agent",
+            patient_uuid=patient_uuid,
+            payload={
+                "patient_uuid": patient_uuid,
+                "action_type": "summary",
+                "semantic_context": semantic_context,
+            },
+        )
+
         worker_result = worker_agent.execute_task(
             patient_uuid=patient_uuid,
             action_type="summary",
             execution_plan=coord_result["execution_plan"],
             semantic_context=semantic_context
+        )
+
+        mcp_bridge.route_from_cloud(
+            agent_name="worker_agent",
+            patient_uuid=patient_uuid,
+            response=worker_result,
         )
         
         if not worker_result.get("success"):

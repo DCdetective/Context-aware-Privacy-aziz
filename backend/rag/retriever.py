@@ -1,8 +1,8 @@
 from typing import Dict, Any, List
 import logging
 
-from vector_store.metadata_store import metadata_store
-from vector_store.synthetic_store import synthetic_store
+import vector_store.metadata_store as _ms_mod
+import vector_store.synthetic_store as _ss_mod
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ class RAGRetriever:
         
         # 1. Retrieve patient history from metadata store
         patient_history = []
-        if metadata_store:
+        if _ms_mod.metadata_store:
             logger.info("Retrieving patient history...")
-            patient_history = metadata_store.retrieve_patient_history(
+            patient_history = _ms_mod.metadata_store.retrieve_patient_history(
                 patient_uuid=patient_uuid,
                 limit=5
             )
@@ -63,9 +63,9 @@ class RAGRetriever:
         # 2. Search for relevant doctors
         specialty = semantic_context.get("symptom_category", "general")
         relevant_doctors = []
-        if synthetic_store:
+        if _ss_mod.synthetic_store:
             logger.info(f"Searching for {specialty} specialists...")
-            relevant_doctors = synthetic_store.search_doctors(
+            relevant_doctors = _ss_mod.synthetic_store.search_doctors(
                 specialty=specialty,
                 top_k=3
             )
@@ -78,9 +78,9 @@ class RAGRetriever:
         
         # 3. Search medical knowledge
         relevant_knowledge = []
-        if synthetic_store:
+        if _ss_mod.synthetic_store:
             logger.info(f"Searching medical knowledge...")
-            relevant_knowledge = synthetic_store.search_medical_knowledge(
+            relevant_knowledge = _ss_mod.synthetic_store.search_medical_knowledge(
                 query=medical_info,
                 top_k=3
             )
@@ -88,9 +88,9 @@ class RAGRetriever:
         
         # 4. Search similar cases
         similar_cases = []
-        if synthetic_store:
+        if _ss_mod.synthetic_store:
             logger.info(f"Searching similar cases...")
-            similar_cases = synthetic_store.search_similar_cases(
+            similar_cases = _ss_mod.synthetic_store.search_similar_cases(
                 query=medical_info,
                 top_k=2
             )

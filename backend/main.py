@@ -22,8 +22,7 @@ if settings.testing_mode:
 else:
     from vector_store.semantic_store import semantic_store
 
-# Import vector stores
-from vector_store import metadata_store, synthetic_store
+# Import mock store classes (used by startup event when needed)
 from vector_store.mock_stores import MockMetadataStore, MockSyntheticStore
 
 # Import agents and inject dependencies
