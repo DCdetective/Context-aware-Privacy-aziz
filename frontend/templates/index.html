@@ -3,22 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedShield</title>
+    <title>MedShield - Privacy-Preserving Medical Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/chatbot.css">
 </head>
 <body>
-    <div class="app">
-        <div class="chat-container">
+    <div class="dashboard">
+        <!-- Left sidebar: navigation + system info -->
+        <aside class="left-panel" id="leftPanel">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V16M8 12H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </div>
+                <span class="brand-name">MedShield</span>
+            </div>
+
+            <nav class="nav-links">
+                <a href="/" class="nav-item active" data-view="chat">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Chat
+                </a>
+                <a href="/appointment" class="nav-item">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Appointments
+                </a>
+                <a href="/followup" class="nav-item">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Follow-ups
+                </a>
+                <a href="/summary" class="nav-item">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Summaries
+                </a>
+            </nav>
+
+            <!-- System health -->
+            <div class="system-health" id="systemHealth">
+                <div class="health-header">System Status</div>
+                <div class="health-items" id="healthItems">
+                    <div class="health-row">
+                        <span class="health-dot loading"></span>
+                        <span class="health-label">Connecting...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session info -->
+            <div class="session-info" id="sessionInfo">
+                <div class="session-header">Session</div>
+                <div class="session-id" id="sessionIdDisplay">No active session</div>
+                <button class="new-session-btn" id="newSessionBtn" type="button">New Session</button>
+            </div>
+
+            <div class="left-panel-footer">
+                <span class="version-tag">v2.0.0</span>
+            </div>
+        </aside>
+
+        <!-- Center: chat interface -->
+        <main class="center-panel">
+            <!-- Top bar -->
+            <header class="top-bar">
+                <button class="panel-toggle left-toggle" id="leftToggle" type="button" aria-label="Toggle navigation">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+                <div class="top-bar-title">
+                    <span class="title-text">MedShield Assistant</span>
+                    <span class="title-badge" id="privacyBadge">Privacy Active</span>
+                </div>
+                <button class="panel-toggle right-toggle" id="rightToggle" type="button" aria-label="Toggle process monitor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </header>
+
             <!-- Messages area -->
             <div class="messages" id="chatMessages">
-                <!-- Welcome message -->
                 <div class="message assistant">
+                    <div class="avatar assistant-avatar">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8V16M8 12H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </div>
                     <div class="bubble">
-                        <p>Hello, I'm MedShield, your privacy-preserving medical assistant.</p>
-                        <p>I can help you with booking appointments, scheduling follow-ups, generating medical summaries, and answering general medical queries.</p>
+                        <p>Hello, I'm <strong>MedShield</strong>, your privacy-preserving medical assistant.</p>
+                        <p>I can help you with:</p>
+                        <ul>
+                            <li>Booking appointments</li>
+                            <li>Scheduling follow-ups</li>
+                            <li>Generating medical summaries</li>
+                            <li>Answering general medical queries</li>
+                        </ul>
+                        <p>All your personal data stays local &mdash; only anonymised UUIDs reach the cloud.</p>
                         <p>How can I help you today?</p>
                     </div>
                 </div>
@@ -27,59 +102,89 @@
             <!-- Typing indicator -->
             <div class="typing-container" id="typingIndicator" style="display: none;">
                 <div class="message assistant">
+                    <div class="avatar assistant-avatar">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
                     <div class="bubble typing-bubble">
                         <div class="typing-dots">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+                            <span></span><span></span><span></span>
                         </div>
+                        <div class="typing-label" id="typingLabel">Processing through agent pipeline...</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Input area -->
+            <!-- Input bar -->
             <div class="input-bar">
                 <form id="chatForm" class="input-form">
                     <div class="input-wrapper">
-                        <textarea
-                            id="messageInput"
-                            rows="1"
-                            maxlength="2000"
-                            placeholder="Send a message..."
-                            aria-label="Message input"
-                        ></textarea>
+                        <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Describe your symptoms or ask a question..." aria-label="Message input"></textarea>
                         <button type="submit" class="send-btn" id="sendButton" aria-label="Send message">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M7 11L12 6L17 11M12 18V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 12 12)"/>
-                            </svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                     </div>
                 </form>
-                <div class="input-hint">Press Enter to send, Shift+Enter for new line</div>
+                <div class="input-hint">Enter to send &middot; Shift+Enter for new line &middot; All PII is pseudonymised locally</div>
             </div>
-        </div>
+        </main>
 
-        <!-- Privacy sidebar (hidden by default, accessible via keyboard shortcut or future button) -->
-        <aside class="privacy-sidebar collapsed" id="privacySidebar" aria-label="Privacy Monitor">
-            <div class="sidebar-header">
-                <span class="sidebar-title">Privacy Monitor</span>
-                <div class="sidebar-actions">
-                    <button class="sidebar-btn" id="refreshPrivacy" type="button" title="Refresh">Refresh</button>
-                    <button class="sidebar-btn" id="toggleSidebar" type="button" aria-label="Close">Close</button>
+        <!-- Right panel: process monitor + privacy -->
+        <aside class="right-panel" id="rightPanel">
+            <div class="right-panel-header">
+                <span class="right-panel-title">Process Monitor</span>
+                <button class="close-right-btn" id="closeRightPanel" type="button" aria-label="Close">&times;</button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="monitor-tabs">
+                <button class="tab-btn active" data-tab="pipeline" type="button">Pipeline</button>
+                <button class="tab-btn" data-tab="privacy" type="button">Privacy</button>
+                <button class="tab-btn" data-tab="mcp" type="button">MCP Bridge</button>
+            </div>
+
+            <!-- Tab: Pipeline -->
+            <div class="tab-content active" id="tab-pipeline">
+                <div class="pipeline-status" id="pipelineStatus">
+                    <div class="pipeline-idle">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <p>Send a message to see the agent processing pipeline here.</p>
+                    </div>
                 </div>
             </div>
-            <div class="sidebar-content" id="sidebarContent">
-                <p class="sidebar-description">Data protection steps are shown here during processing.</p>
-                <div id="privacySteps" class="privacy-steps"></div>
+
+            <!-- Tab: Privacy -->
+            <div class="tab-content" id="tab-privacy">
+                <div class="privacy-section" id="privacySection">
+                    <div class="privacy-summary" id="privacySummary">
+                        <div class="priv-stat">
+                            <span class="priv-stat-value" id="privTotalOps">0</span>
+                            <span class="priv-stat-label">Operations</span>
+                        </div>
+                        <div class="priv-stat">
+                            <span class="priv-stat-value" id="privPiiRemoved">0</span>
+                            <span class="priv-stat-label">PII Removed</span>
+                        </div>
+                        <div class="priv-stat safe">
+                            <span class="priv-stat-value" id="privCloudSafe">0</span>
+                            <span class="priv-stat-label">Cloud-Safe</span>
+                        </div>
+                    </div>
+                    <div class="privacy-transformations" id="privacyTransformations">
+                        <p class="empty-state">Privacy transformations will appear here after sending messages.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: MCP Bridge -->
+            <div class="tab-content" id="tab-mcp">
+                <div class="mcp-section" id="mcpSection">
+                    <div class="mcp-status" id="mcpStatus">
+                        <p class="empty-state">MCP Bridge compliance data will appear here after processing messages.</p>
+                    </div>
+                </div>
+                <button class="refresh-mcp-btn" id="refreshMcpBtn" type="button">Refresh Compliance Report</button>
             </div>
         </aside>
-
-        <!-- Privacy toggle button (minimal, bottom-right) -->
-        <button class="privacy-toggle" id="showPrivacyButton" type="button" title="Privacy Monitor">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </button>
     </div>
 
     <script src="/static/js/chat.js"></script>
