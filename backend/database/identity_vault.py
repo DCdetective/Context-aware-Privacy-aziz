@@ -2,7 +2,9 @@ from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
+from pathlib import Path
 import logging
+import os
 import uuid as uuid_lib
 
 from database.models import Base, PatientIdentity, MedicalRecord, AuditLog
@@ -10,26 +12,44 @@ from utils.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Canonical location: always next to this source file, works from any cwd.
+_CANONICAL_DB_DIR = Path(__file__).resolve().parent
+
 
 class IdentityVault:
     """
     Identity Vault - Local PII storage and management.
-    
+
     CRITICAL PRIVACY COMPONENT:
     - All PII stored here NEVER leaves the local environment
     - Provides UUID ↔ PII mapping
     - Maintains audit trail for compliance
     - Enables re-identification for final output
     """
-    
+
     def __init__(self, db_path: Optional[str] = None):
         """
         Initialize Identity Vault.
-        
+
         Args:
             db_path: Path to SQLite database file
         """
-        self.db_path = db_path or settings.sqlite_db_path
+        raw = db_path or settings.sqlite_db_path
+        resolved = Path(raw)
+
+        # If the path is relative, resolve it so it always points at
+        # backend/database/identity_vault.db no matter what the cwd is.
+        if not resolved.is_absolute():
+            # Best effort: if the parent dir already exists from cwd, use it.
+            if resolved.parent.is_dir():
+                resolved = resolved.resolve()
+            else:
+                # Fall back to the canonical dir next to this source file.
+                resolved = _CANONICAL_DB_DIR / resolved.name
+
+        # Ensure parent directory exists
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = str(resolved)
         self.engine = create_engine(f'sqlite:///{self.db_path}', echo=False)
         self.SessionLocal = sessionmaker(bind=self.engine)
         
