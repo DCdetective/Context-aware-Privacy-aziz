@@ -54,16 +54,26 @@ async def send_message(chat_message: ChatMessage):
         if privacy_report:
             transformations = privacy_report.get('transformations', [])
 
-            # Build original_contains from transformation data for frontend
-            original_contains = {"name": None, "age": None, "gender": None}
+            # Build original_contains dynamically from all PII transformations
+            _field_key_map = {
+                "patient name": "name",
+                "age": "age",
+                "gender": "gender",
+                "phone number": "phone",
+                "email address": "email",
+                "address": "address",
+                "date of birth": "date_of_birth",
+                "social security number": "ssn",
+                "insurance id": "insurance_id",
+                "medical record number": "mrn",
+            }
+            original_contains = {}
             for t in transformations:
-                field = t.get("field", "").lower()
-                if "name" in field:
-                    original_contains["name"] = t.get("original")
-                elif "age" in field:
-                    original_contains["age"] = t.get("original")
-                elif "gender" in field:
-                    original_contains["gender"] = t.get("original")
+                field_lower = t.get("field", "").lower()
+                for label, key in _field_key_map.items():
+                    if label in field_lower:
+                        original_contains[key] = t.get("original")
+                        break
 
             privacy_details = {
                 "transformations": transformations,
