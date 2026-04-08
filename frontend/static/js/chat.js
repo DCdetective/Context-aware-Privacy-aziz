@@ -260,7 +260,11 @@ function renderStreamChunk(chunk) {
     state.lastAssistantBubble = wrapper.querySelector('.bubble');
   }
   const current = state.streamingBubble.textContent || '';
-  state.streamingBubble.textContent = `${current}${current ? ' ' : ''}${chunk}`;
+  const normalizedChunk = String(chunk).trim();
+  if (!normalizedChunk) return;
+  state.streamingBubble.textContent = current
+    ? `${current} ${normalizedChunk}`.replace(/\s+/g, ' ').trim()
+    : normalizedChunk;
 }
 
 function finalizeStreamMessage(text) {
@@ -319,7 +323,7 @@ function renderHitlPrompt(prompt) {
   const yes = document.createElement('button');
   yes.className = 'ghost-btn';
   yes.textContent = 'Confirm';
-  yes.onclick = () => sendAction('confirm', 'confirm');
+  yes.onclick = () => sendAction('hitl_response', 'confirm');
 
   const no = document.createElement('button');
   no.className = 'ghost-btn';

@@ -418,12 +418,23 @@ class SessionManager:
         """List ordered events for a session."""
         db = self._get_db()
         try:
-            q = db.query(SessionEvent).filter(SessionEvent.session_id == session_id).order_by(SessionEvent.event_id.asc())
-            rows = q.all()
-            events = [self._event_row_to_dict(r) for r in rows]
             if limit:
-                return events[-limit:]
-            return events
+                rows = (
+                    db.query(SessionEvent)
+                    .filter(SessionEvent.session_id == session_id)
+                    .order_by(SessionEvent.event_id.desc())
+                    .limit(limit)
+                    .all()
+                )
+                rows = list(reversed(rows))
+            else:
+                rows = (
+                    db.query(SessionEvent)
+                    .filter(SessionEvent.session_id == session_id)
+                    .order_by(SessionEvent.event_id.asc())
+                    .all()
+                )
+            return [self._event_row_to_dict(r) for r in rows]
         finally:
             db.close()
 

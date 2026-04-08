@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any, Literal
 import logging
 import json
 from datetime import datetime
+from utils.config import settings
 
 from agents.coordinator import coordinator
 from agents.session_manager import session_manager
@@ -13,6 +14,8 @@ from database.identity_vault import identity_vault
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+DEFAULT_INTENT = "general"
+STREAM_CHUNK_SIZE = max(1, int(getattr(settings, "stream_chunk_size", 6)))
 
 
 EventType = Literal[
@@ -28,6 +31,19 @@ EventType = Literal[
     "system_notice",
     "error_event",
 ]
+EVENT_TYPES = {
+    "user_message",
+    "assistant_message",
+    "stream_chunk",
+    "workflow_step",
+    "privacy_mask",
+    "appointment_card",
+    "followup_card",
+    "summary_card",
+    "hitl_prompt",
+    "system_notice",
+    "error_event",
+}
 
 
 class ChatMessage(BaseModel):
@@ -143,10 +159,7 @@ def _result_card_event(intent: str, result_payload: Dict[str, Any]) -> Optional[
 def _persist_events(session_id: str, events: List[Dict[str, Any]]) -> None:
     for event in events:
         event_type = event.get("event_type")
-        if event_type not in {
-            "user_message", "assistant_message", "stream_chunk", "workflow_step", "privacy_mask",
-            "appointment_card", "followup_card", "summary_card", "hitl_prompt", "system_notice", "error_event"
-        }:
+        if event_type not in EVENT_TYPES:
             continue
         session_manager.add_event(
             session_id=session_id,
@@ -215,7 +228,7 @@ def _process_chat_message(message: str, session_id: Optional[str]) -> Dict[str, 
         "payload": {"content": result.get("message", "")},
     })
 
-    card_event = _result_card_event(result.get("intent", "general"), result_payload)
+    card_event = _result_card_event(result.get("intent", DEFAULT_INTENT), result_payload)
     if card_event:
         events.append(card_event)
 
@@ -259,7 +272,7 @@ def _process_chat_message(message: str, session_id: Optional[str]) -> Dict[str, 
         "chat_response": ChatResponse(
             success=result["success"],
             message=result["message"],
-            intent=result.get("intent", "general"),
+            intent=result.get("intent", DEFAULT_INTENT),
             patient_uuid=result.get("patient_uuid"),
             patient_name=result.get("patient_name"),
             session_id=result.get("session_id") or canonical_session_id,
@@ -289,7 +302,7 @@ async def get_session_snapshot(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
     except Exception as e:
         logger.error(f"Error restoring session snapshot: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.get("/sessions/{session_id}/events", response_model=SessionEventsResponse)
@@ -305,7 +318,7 @@ async def get_session_events(session_id: str):
         raise
     except Exception as e:
         logger.error(f"Error getting session events: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.post("/sessions/{session_id}/actions", response_model=ChatResponse)
@@ -320,7 +333,7 @@ async def submit_session_action(session_id: str, action: ChatActionRequest):
         raise
     except Exception as e:
         logger.error(f"Error submitting session action: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.post("/message", response_model=ChatResponse)
@@ -333,7 +346,7 @@ async def send_message(chat_message: ChatMessage):
         raise
     except Exception as e:
         logger.error(f"Error in chat API: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 
 @router.post("/stream")
@@ -371,7 +384,6 @@ async def stream_message(stream_request: StreamChatRequest):
 
             workflow_events = _build_workflow_events(result.get("workflow_steps", []), status="running")
             for event in workflow_events:
-                _persist_events(canonical_session_id, [event])
                 yield f"data: {json.dumps(event)}\n\n"
                 event["status"] = "completed"
                 _persist_events(canonical_session_id, [event])
@@ -396,9 +408,11 @@ async def stream_message(stream_request: StreamChatRequest):
 
             final_message = result.get("message", "")
             words = final_message.split()
-            chunk_size = 6
-            for i in range(0, len(words), chunk_size):
-                chunk = " ".join(words[i:i + chunk_size])
+            chunks = [
+                " ".join(words[i:i + STREAM_CHUNK_SIZE]).strip()
+                for i in range(0, len(words), STREAM_CHUNK_SIZE)
+            ]
+            for chunk in chunks:
                 chunk_event = {
                     "event_type": "stream_chunk",
                     "status": "running",
@@ -424,7 +438,7 @@ async def stream_message(stream_request: StreamChatRequest):
                 "session_id": result.get("session_id") or canonical_session_id,
             }
 
-            card_event = _result_card_event(result.get("intent", "general"), result_payload)
+            card_event = _result_card_event(result.get("intent", DEFAULT_INTENT), result_payload)
             if card_event:
                 _persist_events(canonical_session_id, [card_event])
                 yield f"data: {json.dumps(card_event)}\n\n"
@@ -475,7 +489,7 @@ async def stream_message(stream_request: StreamChatRequest):
                 "payload": {
                     "notice": "stream_complete",
                     "session_id": canonical_session_id,
-                    "intent": result.get("intent", "general"),
+                    "intent": result.get("intent", DEFAULT_INTENT),
                     "workflow_steps": result.get("workflow_steps", []),
                     "privacy_safe": result.get("privacy_safe", True),
                 },
@@ -486,7 +500,7 @@ async def stream_message(stream_request: StreamChatRequest):
             error_event = {
                 "event_type": "error_event",
                 "status": "failed",
-                "payload": {"message": f"Internal stream error: {str(e)}"},
+                "payload": {"message": "Internal stream error"},
             }
             yield f"data: {json.dumps(error_event)}\n\n"
 
