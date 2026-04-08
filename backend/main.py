@@ -147,21 +147,21 @@ async def home(request: Request):
 
 @app.get("/appointment", response_class=HTMLResponse)
 async def appointment_page(request: Request):
-    """Serve the appointment booking page."""
-    logger.info("Serving appointment page")
-    return templates.TemplateResponse("appointment.html", {"request": request})
+    """Serve unified chat interface (legacy route)."""
+    logger.info("Serving unified chat interface from /appointment")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/followup", response_class=HTMLResponse)
 async def followup_page(request: Request):
-    """Serve the follow-up scheduling page."""
-    logger.info("Serving follow-up page")
-    return templates.TemplateResponse("followup.html", {"request": request})
+    """Serve unified chat interface (legacy route)."""
+    logger.info("Serving unified chat interface from /followup")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/summary", response_class=HTMLResponse)
 async def summary_page(request: Request):
-    """Serve the medical summary page."""
-    logger.info("Serving summary page")
-    return templates.TemplateResponse("summary.html", {"request": request})
+    """Serve unified chat interface (legacy route)."""
+    logger.info("Serving unified chat interface from /summary")
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 if __name__ == "__main__":

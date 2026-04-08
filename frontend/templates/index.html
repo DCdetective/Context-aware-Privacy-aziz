@@ -3,86 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedShield</title>
+    <title>MedShield v2</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/chatbot.css">
 </head>
 <body>
-    <div class="app">
-        <div class="chat-container">
-            <!-- Messages area -->
-            <div class="messages" id="chatMessages">
-                <!-- Welcome message -->
-                <div class="message assistant">
-                    <div class="bubble">
-                        <p>Hello, I'm MedShield, your privacy-preserving medical assistant.</p>
-                        <p>I can help you with booking appointments, scheduling follow-ups, generating medical summaries, and answering general medical queries.</p>
-                        <p>How can I help you today?</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Typing indicator -->
-            <div class="typing-container" id="typingIndicator" style="display: none;">
-                <div class="message assistant">
-                    <div class="bubble typing-bubble">
-                        <div class="typing-dots">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Input area -->
-            <div class="input-bar">
-                <form id="chatForm" class="input-form">
-                    <div class="input-wrapper">
-                        <textarea
-                            id="messageInput"
-                            rows="1"
-                            maxlength="2000"
-                            placeholder="Send a message..."
-                            aria-label="Message input"
-                        ></textarea>
-                        <button type="submit" class="send-btn" id="sendButton" aria-label="Send message">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M7 11L12 6L17 11M12 18V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-90 12 12)"/>
-                            </svg>
-                        </button>
-                    </div>
-                </form>
-                <div class="input-hint">Press Enter to send, Shift+Enter for new line</div>
-            </div>
+<div class="app-shell">
+    <aside class="left-panel" id="workflowPanel">
+        <div class="panel-header">
+            <h3>Workflow</h3>
+            <button class="ghost-btn" id="toggleWorkflow" type="button">Hide</button>
         </div>
+        <div class="workflow-timeline" id="workflowTimeline"></div>
+    </aside>
 
-        <!-- Privacy sidebar (hidden by default, accessible via keyboard shortcut or future button) -->
-        <aside class="privacy-sidebar collapsed" id="privacySidebar" aria-label="Privacy Monitor">
-            <div class="sidebar-header">
-                <span class="sidebar-title">Privacy Monitor</span>
-                <div class="sidebar-actions">
-                    <button class="sidebar-btn" id="refreshPrivacy" type="button" title="Refresh">Refresh</button>
-                    <button class="sidebar-btn" id="toggleSidebar" type="button" aria-label="Close">Close</button>
-                </div>
+    <main class="chat-shell">
+        <header class="topbar">
+            <div>
+                <h1>MedShield</h1>
+                <p class="subtitle">Privacy-preserving medical assistant</p>
             </div>
-            <div class="sidebar-content" id="sidebarContent">
-                <p class="sidebar-description">Data protection steps are shown here during processing.</p>
-                <div id="privacySteps" class="privacy-steps"></div>
+            <div class="status-row">
+                <span class="badge" id="sessionBadge">Session: -</span>
+                <span class="badge" id="memoryBadge">Memory: idle</span>
             </div>
-        </aside>
+        </header>
 
-        <!-- Privacy toggle button (minimal, bottom-right) -->
-        <button class="privacy-toggle" id="showPrivacyButton" type="button" title="Privacy Monitor">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </button>
-    </div>
+        <section class="messages" id="chatMessages"></section>
 
-    <script src="/static/js/chat.js"></script>
-    <script src="/static/js/visualization.js"></script>
+        <footer class="input-bar">
+            <form id="chatForm" class="input-form">
+                <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Ask MedShield anything..."></textarea>
+                <button type="submit" id="sendButton" class="send-btn">Send</button>
+            </form>
+        </footer>
+    </main>
+
+    <aside class="right-panel">
+        <section class="panel-block">
+            <div class="panel-header">
+                <h3>Active Agent</h3>
+            </div>
+            <div id="agentActivity" class="agent-activity">Awaiting message…</div>
+        </section>
+
+        <section class="panel-block">
+            <div class="panel-header">
+                <h3>Privacy Masking</h3>
+                <button class="ghost-btn" id="togglePrivacy" type="button">Collapse</button>
+            </div>
+            <div id="privacyPanel" class="privacy-panel"></div>
+        </section>
+    </aside>
+</div>
+
+<script src="/static/js/chat.js"></script>
 </body>
 </html>
