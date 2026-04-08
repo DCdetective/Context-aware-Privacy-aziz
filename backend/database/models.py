@@ -148,3 +148,35 @@ class Session(Base):
 
     def __repr__(self):
         return f"<Session(id={self.session_id}, workflow={self.active_workflow}, stage={self.workflow_stage})>"
+
+
+class SessionEvent(Base):
+    """
+    Ordered event log for a chat session.
+    Stores structured UI/backend events for full state restoration.
+    """
+    __tablename__ = "session_events"
+
+    event_id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(36), nullable=False, index=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="completed")
+    agent = Column(String(100), nullable=True)
+    role = Column(String(20), nullable=True)
+    payload = Column(Text, nullable=False, default="{}")  # JSON string
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    def to_dict(self):
+        return {
+            "event_id": self.event_id,
+            "session_id": self.session_id,
+            "event_type": self.event_type,
+            "status": self.status,
+            "agent": self.agent,
+            "role": self.role,
+            "payload": self.payload,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<SessionEvent(id={self.event_id}, session={self.session_id}, type={self.event_type})>"

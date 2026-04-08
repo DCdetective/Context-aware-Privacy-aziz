@@ -1,548 +1,419 @@
-// MedShield Chat - Premium ChatGPT-like Interface
+const EVENT_TYPES = new Set([
+  'user_message', 'assistant_message', 'stream_chunk', 'workflow_step', 'privacy_mask',
+  'appointment_card', 'followup_card', 'summary_card', 'hitl_prompt', 'system_notice', 'error_event'
+]);
 
-let chatHistory = [];
-let currentSessionId = null;
+const state = {
+  sessionId: null,
+  events: [],
+  workflow: [],
+  activeAgent: null,
+  activeAgentResponsibility: null,
+  streamingBubble: null,
+  lastAssistantBubble: null,
+  privacyCollapsed: false,
+};
 
-document.addEventListener('DOMContentLoaded', function() {
-    const chatForm = document.getElementById('chatForm');
-    const messageInput = document.getElementById('messageInput');
-    const sendButton = document.getElementById('sendButton');
+const AGENT_RESPONSIBILITIES = {
+  Gatekeeper: 'privacy masking',
+  Coordinator: 'routing/planning',
+  'Context Agent': 'context retrieval',
+  'Execution Agent': 'task execution',
+  'Memory Manager': 'save/retrieve history',
+  'HITL Manager': 'waiting for user confirmation',
+};
 
-    // Auto-resize textarea
-    messageInput.addEventListener('input', autoResize);
+const els = {};
 
-    // Form submission
-    chatForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        await handleSendMessage();
-    });
-
-    // Enter to send (Shift+Enter for new line)
-    messageInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    });
-
-    // Initial animation for welcome message
-    const welcomeMessage = document.querySelector('.message.assistant');
-    if (welcomeMessage) {
-        welcomeMessage.style.animationDelay = '0.1s';
-    }
+document.addEventListener('DOMContentLoaded', async () => {
+  bindElements();
+  bindEvents();
+  await initSession();
+  await restoreSession();
+  if (!els.chatMessages.children.length) {
+    renderAssistantMessage('Hello, I\'m MedShield. Ask me about appointments, follow-ups, or summaries.');
+  }
 });
 
+function bindElements() {
+  els.chatForm = document.getElementById('chatForm');
+  els.messageInput = document.getElementById('messageInput');
+  els.sendButton = document.getElementById('sendButton');
+  els.chatMessages = document.getElementById('chatMessages');
+  els.workflowTimeline = document.getElementById('workflowTimeline');
+  els.agentActivity = document.getElementById('agentActivity');
+  els.privacyPanel = document.getElementById('privacyPanel');
+  els.sessionBadge = document.getElementById('sessionBadge');
+  els.memoryBadge = document.getElementById('memoryBadge');
+  els.toggleWorkflow = document.getElementById('toggleWorkflow');
+  els.workflowPanel = document.getElementById('workflowPanel');
+  els.togglePrivacy = document.getElementById('togglePrivacy');
+}
+
+function bindEvents() {
+  els.chatForm.addEventListener('submit', onSubmit);
+  els.messageInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      els.chatForm.dispatchEvent(new Event('submit'));
+    }
+  });
+  els.messageInput.addEventListener('input', autoResize);
+
+  els.toggleWorkflow.addEventListener('click', () => {
+    const hidden = els.workflowPanel.style.display === 'none';
+    els.workflowPanel.style.display = hidden ? '' : 'none';
+    els.toggleWorkflow.textContent = hidden ? 'Hide' : 'Show';
+  });
+
+  els.togglePrivacy.addEventListener('click', () => {
+    state.privacyCollapsed = !state.privacyCollapsed;
+    els.privacyPanel.style.display = state.privacyCollapsed ? 'none' : 'flex';
+    els.togglePrivacy.textContent = state.privacyCollapsed ? 'Expand' : 'Collapse';
+  });
+}
+
+async function initSession() {
+  const cachedSessionId = localStorage.getItem('medshield_session_id');
+  if (cachedSessionId) {
+    state.sessionId = cachedSessionId;
+    updateSessionBadge();
+    return;
+  }
+
+  const response = await fetch('/api/chat/sessions', { method: 'POST' });
+  const data = await response.json();
+  state.sessionId = data.session_id;
+  localStorage.setItem('medshield_session_id', state.sessionId);
+  updateSessionBadge();
+}
+
+async function restoreSession() {
+  if (!state.sessionId) return;
+  try {
+    const response = await fetch(`/api/chat/sessions/${state.sessionId}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    const events = data?.snapshot?.events || [];
+    if (!Array.isArray(events)) return;
+
+    state.events = [];
+    clearView();
+
+    for (const event of events) {
+      if (event.event_type === 'stream_chunk') continue;
+      applyEvent(event, { restoring: true });
+    }
+  } catch (error) {
+    console.error('Failed restoring session:', error);
+  }
+}
+
+async function onSubmit(e) {
+  e.preventDefault();
+  const message = els.messageInput.value.trim();
+  if (!message) return;
+
+  renderUserMessage(message);
+  els.messageInput.value = '';
+  autoResize();
+  setInputDisabled(true);
+
+  try {
+    await streamMessage(message);
+  } catch (error) {
+    console.error(error);
+    applyEvent({
+      event_type: 'error_event',
+      status: 'failed',
+      payload: { message: 'Connection error. Please try again.' },
+    });
+  } finally {
+    setInputDisabled(false);
+    els.messageInput.focus();
+  }
+}
+
+async function streamMessage(message) {
+  const response = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, session_id: state.sessionId }),
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error('Stream failed');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+
+    for (const chunk of chunks) {
+      const line = chunk.trim();
+      if (!line.startsWith('data:')) continue;
+      const raw = line.replace(/^data:\s*/, '');
+      try {
+        const event = JSON.parse(raw);
+        applyEvent(event);
+      } catch {
+        // ignore malformed chunk
+      }
+    }
+  }
+}
+
+function applyEvent(event, options = {}) {
+  if (!event || !EVENT_TYPES.has(event.event_type)) return;
+
+  state.events.push(event);
+
+  switch (event.event_type) {
+    case 'workflow_step':
+      renderWorkflowStep(event);
+      updateAgent(event.agent, event.payload?.responsibility);
+      break;
+    case 'privacy_mask':
+      renderPrivacyEvent(event);
+      updateAgent('Gatekeeper', AGENT_RESPONSIBILITIES.Gatekeeper);
+      break;
+    case 'stream_chunk':
+      renderStreamChunk(event.payload?.chunk || '');
+      updateAgent('Execution Agent', AGENT_RESPONSIBILITIES['Execution Agent']);
+      break;
+    case 'assistant_message':
+      finalizeStreamMessage(event.payload?.content || '');
+      break;
+    case 'appointment_card':
+    case 'followup_card':
+    case 'summary_card':
+      renderResultCard(event.event_type, event.payload || {});
+      break;
+    case 'hitl_prompt':
+      renderHitlPrompt(event.payload?.prompt || 'Action required');
+      updateAgent('HITL Manager', AGENT_RESPONSIBILITIES['HITL Manager']);
+      break;
+    case 'system_notice':
+      handleSystemNotice(event.payload || {});
+      if (!options.restoring) {
+        if (event.payload?.session_id) {
+          state.sessionId = event.payload.session_id;
+          localStorage.setItem('medshield_session_id', state.sessionId);
+          updateSessionBadge();
+        }
+      }
+      break;
+    case 'error_event':
+      renderAssistantMessage(event.payload?.message || 'Unknown error', { error: true });
+      break;
+    default:
+      break;
+  }
+
+  scrollToBottom();
+}
+
+function handleSystemNotice(payload) {
+  const op = payload.operation;
+  if (op === 'memory_read') {
+    els.memoryBadge.textContent = 'Memory: read';
+  } else if (op === 'memory_write') {
+    els.memoryBadge.textContent = 'Memory: updated';
+  } else if (payload.notice === 'stream_complete') {
+    els.memoryBadge.textContent = 'Memory: synced';
+  }
+}
+
+function renderUserMessage(text) {
+  const message = document.createElement('div');
+  message.className = 'message user';
+  message.innerHTML = `<div class="bubble"><div>${escapeHtml(text)}</div></div>`;
+  els.chatMessages.appendChild(message);
+}
+
+function renderAssistantMessage(text, options = {}) {
+  const message = document.createElement('div');
+  message.className = 'message assistant';
+  const safe = escapeHtml(text).replace(/\n/g, '<br>');
+  const color = options.error ? ' style="color:#fca5a5"' : '';
+  message.innerHTML = `<div class="bubble"><div${color}>${safe}</div></div>`;
+  els.chatMessages.appendChild(message);
+  state.lastAssistantBubble = message.querySelector('.bubble');
+}
+
+function renderStreamChunk(chunk) {
+  if (!chunk) return;
+  if (!state.streamingBubble) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message assistant';
+    wrapper.innerHTML = `<div class="bubble"><div class="streaming-cursor" id="streamText"></div></div>`;
+    els.chatMessages.appendChild(wrapper);
+    state.streamingBubble = wrapper.querySelector('#streamText');
+    state.lastAssistantBubble = wrapper.querySelector('.bubble');
+  }
+  const current = state.streamingBubble.textContent || '';
+  const normalizedChunk = String(chunk).trim();
+  if (!normalizedChunk) return;
+  state.streamingBubble.textContent = current
+    ? `${current} ${normalizedChunk}`.replace(/\s+/g, ' ').trim()
+    : normalizedChunk;
+}
+
+function finalizeStreamMessage(text) {
+  if (state.streamingBubble) {
+    state.streamingBubble.classList.remove('streaming-cursor');
+    state.streamingBubble.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+    state.streamingBubble = null;
+  } else {
+    renderAssistantMessage(text);
+  }
+}
+
+function renderWorkflowStep(event) {
+  const payload = event.payload || {};
+  const stepText = payload.step || `${payload.from_stage || '-'} → ${payload.to_stage || '-'}`;
+  const item = document.createElement('div');
+  item.className = `workflow-item ${event.status || 'completed'}`;
+  item.innerHTML = `
+    <div class="workflow-title">${escapeHtml(stepText)}</div>
+    <div class="workflow-time">${escapeHtml((event.status || 'completed').toUpperCase())} • ${formatTime(payload.timestamp || event.created_at)}</div>
+  `;
+  els.workflowTimeline.appendChild(item);
+}
+
+function renderPrivacyEvent(event) {
+  const p = event.payload || {};
+  const item = document.createElement('div');
+  item.className = 'privacy-item';
+  item.innerHTML = `
+    <div><strong>${escapeHtml(p.field || 'PII')}</strong></div>
+    <div class="map">${escapeHtml(String(p.original ?? ''))} → ${escapeHtml(String(p.transformed ?? ''))}</div>
+    <div>${escapeHtml(p.method || 'masking')}</div>
+  `;
+  els.privacyPanel.prepend(item);
+}
+
+function renderResultCard(type, payload) {
+  if (!state.lastAssistantBubble) return;
+  const card = document.createElement('div');
+  card.className = 'result-card';
+  const titleMap = {
+    appointment_card: 'Appointment Progress',
+    followup_card: 'Follow-up Progress',
+    summary_card: 'Summary Progress',
+  };
+  card.innerHTML = `<h4>${titleMap[type] || 'Task'}</h4>${objectToRows(payload)}`;
+  state.lastAssistantBubble.appendChild(card);
+}
+
+function renderHitlPrompt(prompt) {
+  if (!state.lastAssistantBubble) return;
+  const row = document.createElement('div');
+  row.className = 'meta-row';
+  row.innerHTML = `<span class="meta-pill">HITL required</span>`;
+
+  const yes = document.createElement('button');
+  yes.className = 'ghost-btn';
+  yes.textContent = 'Confirm';
+  yes.onclick = () => sendAction('hitl_response', 'confirm');
+
+  const no = document.createElement('button');
+  no.className = 'ghost-btn';
+  no.textContent = 'Cancel';
+  no.onclick = () => sendAction('hitl_response', 'cancel');
+
+  const helper = document.createElement('div');
+  helper.className = 'meta-row';
+  helper.innerHTML = `<span class="meta-pill">${escapeHtml(prompt.slice(0, 80))}</span>`;
+
+  row.appendChild(yes);
+  row.appendChild(no);
+  state.lastAssistantBubble.appendChild(helper);
+  state.lastAssistantBubble.appendChild(row);
+}
+
+async function sendAction(action, value) {
+  if (!state.sessionId) return;
+  setInputDisabled(true);
+  try {
+    const response = await fetch(`/api/chat/sessions/${state.sessionId}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, value }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Action failed');
+    (data.events || []).forEach((event) => applyEvent(event));
+    if (!data.events?.length) {
+      finalizeStreamMessage(data.message || 'Action processed');
+    }
+  } catch (e) {
+    renderAssistantMessage(e.message || 'Action failed', { error: true });
+  } finally {
+    setInputDisabled(false);
+  }
+}
+
+function updateAgent(agent, responsibility) {
+  if (!agent) return;
+  const role = responsibility || AGENT_RESPONSIBILITIES[agent] || 'processing';
+  state.activeAgent = agent;
+  state.activeAgentResponsibility = role;
+  els.agentActivity.innerHTML = `<strong>${escapeHtml(agent)}</strong> • ${escapeHtml(role)}`;
+}
+
+function updateSessionBadge() {
+  const sid = state.sessionId ? `${state.sessionId.slice(0, 8)}…` : '-';
+  els.sessionBadge.textContent = `Session: ${sid}`;
+}
+
+function setInputDisabled(disabled) {
+  els.messageInput.disabled = disabled;
+  els.sendButton.disabled = disabled;
+}
+
 function autoResize() {
-    const messageInput = document.getElementById('messageInput');
-    messageInput.style.height = 'auto';
-    messageInput.style.height = Math.min(messageInput.scrollHeight, 200) + 'px';
+  els.messageInput.style.height = 'auto';
+  els.messageInput.style.height = `${Math.min(els.messageInput.scrollHeight, 180)}px`;
 }
 
-async function handleSendMessage() {
-    const messageInput = document.getElementById('messageInput');
-    const sendButton = document.getElementById('sendButton');
-    const message = messageInput.value.trim();
-
-    if (!message) return;
-
-    // Add user message to chat
-    addUserMessage(message);
-
-    // Clear input and reset height
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
-
-    // Disable input while processing
-    messageInput.disabled = true;
-    sendButton.disabled = true;
-
-    // Show typing indicator
-    showTypingIndicator();
-
-    try {
-        // Send to API
-        const payload = { message: message };
-        if (currentSessionId) {
-            payload.session_id = currentSessionId;
-        }
-
-        const response = await fetch('/api/chat/message', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await response.json();
-
-        // Track session ID from response for multi-turn conversations
-        if (data.session_id) {
-            currentSessionId = data.session_id;
-        } else if (data.result && data.result.session_id) {
-            currentSessionId = data.result.session_id;
-        }
-
-        // Hide typing indicator
-        hideTypingIndicator();
-
-        if (response.ok && data.success !== false) {
-            // Add bot response
-            addBotMessage(data);
-        } else {
-            // Handle error responses (including 400, 422, 500)
-            const errorMsg = data.message || data.detail || 'Sorry, I encountered an error. Please try again.';
-            addBotMessage({
-                message: errorMsg,
-                intent: 'error',
-                result: {},
-                workflow_steps: []
-            });
-        }
-
-    } catch (error) {
-        console.error('Error:', error);
-        hideTypingIndicator();
-        addBotMessage({
-            message: 'Sorry, I encountered a connection error. Please try again.',
-            intent: 'error'
-        });
-    } finally {
-        // Re-enable input
-        messageInput.disabled = false;
-        sendButton.disabled = false;
-        messageInput.focus();
-    }
+function formatTime(value) {
+  if (!value) return 'now';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'now';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function addUserMessage(text) {
-    const chatMessages = document.getElementById('chatMessages');
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message user';
-    messageDiv.innerHTML = `
-        <div class="bubble">
-            <p>${escapeHtml(text)}</p>
-        </div>
-    `;
-
-    chatMessages.appendChild(messageDiv);
-    scrollToBottom();
-
-    // Add to history
-    chatHistory.push({
-        type: 'user',
-        text: text,
-        timestamp: new Date().toISOString()
-    });
+function objectToRows(data) {
+  return Object.entries(data || {})
+    .slice(0, 8)
+    .filter(([k, v]) => v !== null && v !== undefined && typeof v !== 'object')
+    .map(([k, v]) => `<p><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}</p>`)
+    .join('');
 }
 
-function addBotMessage(data) {
-    const chatMessages = document.getElementById('chatMessages');
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message assistant';
-
-    let bubbleContent = `<p>${escapeHtml(data.message)}</p>`;
-
-    // Add result card based on intent
-    if (data.result) {
-        bubbleContent += formatResultCard(data.intent, data.result);
-    }
-
-    messageDiv.innerHTML = `
-        <div class="bubble">
-            ${bubbleContent}
-        </div>
-    `;
-
-    chatMessages.appendChild(messageDiv);
-    
-    // Display privacy report if available
-    if (data.result && data.result.privacy_details && data.result.privacy_details.transformations) {
-        displayPrivacyReport(data.result.privacy_details, messageDiv);
-    }
-    
-    // Display workflow steps if available
-    if (data.workflow_steps && data.workflow_steps.length > 0) {
-        displayWorkflowSteps(data.workflow_steps, messageDiv);
-    }
-    
-    // Handle disambiguation
-    if (data.intent === 'disambiguation_required' && data.result && data.result.disambiguation_data) {
-        displayDisambiguation(data.result.disambiguation_data, messageDiv);
-    }
-    
-    // Handle confirmation required (new patient creation)
-    if (data.intent === 'confirmation_required') {
-        displayConfirmationButtons(messageDiv);
-    }
-    
-    // Handle confirmation summary (appointment booking etc.)
-    if (data.intent === 'awaiting_confirmation' && data.message.toLowerCase().includes('confirm')) {
-        displayConfirmationSummary(data.message, messageDiv);
-    }
-    
-    scrollToBottom();
-
-    // Add to history
-    chatHistory.push({
-        type: 'bot',
-        data: data,
-        timestamp: new Date().toISOString()
-    });
-
-    // Update privacy visualization with details
-    if (window.updatePrivacyVisualization && data.workflow_steps) {
-        // Use privacy_details from result (which comes from privacy_report)
-        const privacyDetails = data.result?.privacy_details || null;
-        window.updatePrivacyVisualization(data.workflow_steps, privacyDetails);
-        
-        // Auto-open sidebar when there are privacy transformations
-        if (privacyDetails && privacyDetails.transformations && privacyDetails.transformations.length > 0) {
-            const sidebar = document.getElementById('privacySidebar');
-            const showBtn = document.getElementById('showPrivacyButton');
-            if (sidebar && sidebar.classList.contains('collapsed')) {
-                sidebar.classList.remove('collapsed');
-                if (showBtn) showBtn.style.display = 'none';
-            }
-        }
-    }
-}
-
-function formatResultCard(intent, result) {
-    // Get patient name from result (coordinator always sets it now)
-    const patientName = result.patient_name || 'N/A';
-    
-    if (intent === 'appointment') {
-        return `
-            <div class="result-card">
-                <h4>Appointment Details</h4>
-                <div class="result-detail">
-                    <span class="result-label">Patient</span>
-                    <span class="result-value">${escapeHtml(patientName)}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Time</span>
-                    <span class="result-value">${formatDateTime(result.appointment_time)}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Duration</span>
-                    <span class="result-value">${result.consultation_duration || 30} minutes</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Urgency</span>
-                    <span class="result-value urgency-${result.urgency_level || 'routine'}">${capitalizeFirst(result.urgency_level || 'routine')}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Specialty</span>
-                    <span class="result-value">${result.recommended_specialty || 'General'}</span>
-                </div>
-            </div>
-        `;
-    } else if (intent === 'followup') {
-        return `
-            <div class="result-card">
-                <h4>Follow-up Details</h4>
-                <div class="result-detail">
-                    <span class="result-label">Patient</span>
-                    <span class="result-value">${escapeHtml(patientName)}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Time</span>
-                    <span class="result-value">${formatDateTime(result.followup_time)}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Previous Visits</span>
-                    <span class="result-value">${result.previous_visits || 0}</span>
-                </div>
-            </div>
-        `;
-    } else if (intent === 'summary') {
-        return `
-            <div class="result-card">
-                <h4>Medical Summary</h4>
-                <div class="result-detail">
-                    <span class="result-label">Patient</span>
-                    <span class="result-value">${escapeHtml(patientName)}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Total Visits</span>
-                    <span class="result-value">${result.summary?.total_visits || 0}</span>
-                </div>
-                <div class="result-detail">
-                    <span class="result-label">Record Types</span>
-                    <span class="result-value">${result.summary?.record_types?.join(', ') || 'None'}</span>
-                </div>
-            </div>
-        `;
-    } else if (intent === 'general' && result.suggestions) {
-        return `
-            <div class="result-card">
-                <h4>Suggestions</h4>
-                <ul>
-                    ${result.suggestions.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-
-    return '';
-}
-
-function showTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    indicator.style.display = 'block';
-    scrollToBottom();
-}
-
-function hideTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    indicator.style.display = 'none';
+function clearView() {
+  els.chatMessages.innerHTML = '';
+  els.workflowTimeline.innerHTML = '';
+  els.privacyPanel.innerHTML = '';
+  state.lastAssistantBubble = null;
+  state.streamingBubble = null;
 }
 
 function scrollToBottom() {
-    const chatMessages = document.getElementById('chatMessages');
-    // Use requestAnimationFrame for smoother scrolling
-    requestAnimationFrame(() => {
-        chatMessages.scrollTo({
-            top: chatMessages.scrollHeight,
-            behavior: 'smooth'
-        });
-    });
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
 
-function formatDateTime(isoString) {
-    if (!isoString) return 'N/A';
-    const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function capitalizeFirst(str) {
-    if (!str) return '';
-    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-}
-
-/**
- * Display privacy transformation report
- */
-function displayPrivacyReport(privacyReport, messageDiv) {
-    if (!privacyReport || !privacyReport.transformations) {
-        return;
-    }
-    
-    // Create privacy panel
-    const privacyPanel = document.createElement('div');
-    privacyPanel.className = 'privacy-panel';
-    
-    const header = document.createElement('div');
-    header.className = 'privacy-header';
-    header.innerHTML = '<span class="privacy-icon">🔒</span> Privacy Protection Applied';
-    
-    const transformList = document.createElement('div');
-    transformList.className = 'privacy-transforms';
-    
-    privacyReport.transformations.forEach(transform => {
-        const item = document.createElement('div');
-        item.className = 'privacy-item';
-        
-        const field = document.createElement('span');
-        field.className = 'privacy-field';
-        field.textContent = transform.field + ':';
-        
-        const transformation = document.createElement('span');
-        transformation.className = 'privacy-transformation';
-        transformation.innerHTML = `${escapeHtml(transform.original)} → <strong>${escapeHtml(transform.transformed)}</strong>`;
-        
-        const method = document.createElement('span');
-        method.className = 'privacy-method';
-        method.textContent = `(${transform.method})`;
-        
-        item.appendChild(field);
-        item.appendChild(transformation);
-        item.appendChild(method);
-        transformList.appendChild(item);
-    });
-    
-    privacyPanel.appendChild(header);
-    privacyPanel.appendChild(transformList);
-    
-    messageDiv.querySelector('.bubble').appendChild(privacyPanel);
-}
-
-/**
- * Display workflow steps
- */
-function displayWorkflowSteps(steps, messageDiv) {
-    if (!steps || steps.length === 0) {
-        return;
-    }
-    
-    const workflowPanel = document.createElement('div');
-    workflowPanel.className = 'workflow-panel collapsed';
-    
-    const header = document.createElement('div');
-    header.className = 'workflow-header';
-    header.innerHTML = '<span class="workflow-icon">⚙️</span> Agent Workflow <span class="workflow-toggle">▼</span>';
-    header.onclick = () => {
-        workflowPanel.classList.toggle('collapsed');
-    };
-    
-    const stepsList = document.createElement('div');
-    stepsList.className = 'workflow-steps';
-    
-    steps.forEach((step, index) => {
-        const stepItem = document.createElement('div');
-        stepItem.className = 'workflow-step';
-        stepItem.innerHTML = `<span class="step-number">${index + 1}</span> ${escapeHtml(step)}`;
-        stepsList.appendChild(stepItem);
-    });
-    
-    workflowPanel.appendChild(header);
-    workflowPanel.appendChild(stepsList);
-    
-    messageDiv.querySelector('.bubble').appendChild(workflowPanel);
-}
-
-/**
- * Display disambiguation options
- */
-function displayDisambiguation(disambiguationData, messageDiv) {
-    if (!disambiguationData || !disambiguationData.candidates) {
-        return;
-    }
-    
-    const disambigPanel = document.createElement('div');
-    disambigPanel.className = 'disambiguation-panel';
-    
-    const header = document.createElement('div');
-    header.className = 'disambig-header';
-    header.textContent = '👥 Multiple Patients Found - Please Select:';
-    
-    const candidatesList = document.createElement('div');
-    candidatesList.className = 'candidate-list';
-    
-    disambiguationData.candidates.forEach(candidate => {
-        const card = document.createElement('div');
-        card.className = 'candidate-card';
-        card.onclick = () => selectPatient(candidate.patient_uuid);
-        
-        const name = document.createElement('div');
-        name.className = 'candidate-name';
-        name.textContent = candidate.patient_name;
-        
-        const details = document.createElement('div');
-        details.className = 'candidate-details';
-        details.innerHTML = `
-            UUID: ${candidate.patient_uuid.substring(0, 8)}...<br>
-            Age: ${candidate.age || 'N/A'} | Gender: ${candidate.gender || 'N/A'}<br>
-            Last seen: ${candidate.last_accessed ? new Date(candidate.last_accessed).toLocaleDateString() : 'Never'}
-        `;
-        
-        card.appendChild(name);
-        card.appendChild(details);
-        candidatesList.appendChild(card);
-    });
-    
-    disambigPanel.appendChild(header);
-    disambigPanel.appendChild(candidatesList);
-    
-    messageDiv.querySelector('.bubble').appendChild(disambigPanel);
-}
-
-/**
- * Select patient from disambiguation
- */
-function selectPatient(patientUuid) {
-    const messageInput = document.getElementById('messageInput');
-    messageInput.value = patientUuid;
-    document.getElementById('chatForm').dispatchEvent(new Event('submit'));
-}
-
-/**
- * Display confirmation summary
- */
-function displayConfirmationSummary(message, messageDiv) {
-    // Parse the message for confirmation details
-    const confirmPanel = document.createElement('div');
-    confirmPanel.className = 'confirmation-panel';
-    
-    const messageText = document.createElement('div');
-    messageText.className = 'confirmation-message';
-    messageText.textContent = message;
-    
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'confirmation-buttons';
-    
-    const confirmBtn = document.createElement('button');
-    confirmBtn.className = 'confirm-btn';
-    confirmBtn.textContent = '✓ Confirm';
-    confirmBtn.onclick = () => sendConfirmation('yes');
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'cancel-btn';
-    cancelBtn.textContent = '✗ Cancel';
-    cancelBtn.onclick = () => sendConfirmation('no');
-    
-    buttonContainer.appendChild(confirmBtn);
-    buttonContainer.appendChild(cancelBtn);
-    
-    confirmPanel.appendChild(messageText);
-    confirmPanel.appendChild(buttonContainer);
-    
-    messageDiv.querySelector('.bubble').appendChild(confirmPanel);
-}
-
-/**
- * Display Yes/No confirmation buttons (for new patient creation etc.)
- */
-function displayConfirmationButtons(messageDiv) {
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'confirmation-buttons';
-    buttonContainer.style.marginTop = '12px';
-    
-    const yesBtn = document.createElement('button');
-    yesBtn.className = 'confirm-btn';
-    yesBtn.textContent = '✓ Yes, create patient';
-    yesBtn.onclick = () => {
-        // Disable buttons after click
-        yesBtn.disabled = true;
-        noBtn.disabled = true;
-        sendConfirmation('yes');
-    };
-    
-    const noBtn = document.createElement('button');
-    noBtn.className = 'cancel-btn';
-    noBtn.textContent = '✗ No, cancel';
-    noBtn.onclick = () => {
-        yesBtn.disabled = true;
-        noBtn.disabled = true;
-        sendConfirmation('no');
-    };
-    
-    buttonContainer.appendChild(yesBtn);
-    buttonContainer.appendChild(noBtn);
-    
-    messageDiv.querySelector('.bubble').appendChild(buttonContainer);
-}
-
-/**
- * Send confirmation response
- */
-function sendConfirmation(response) {
-    const messageInput = document.getElementById('messageInput');
-    messageInput.value = response;
-    document.getElementById('chatForm').dispatchEvent(new Event('submit'));
+function escapeHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value || '';
+  return div.innerHTML;
 }
